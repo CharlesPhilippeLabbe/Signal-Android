@@ -14,10 +14,10 @@ public class MasterCipherTest extends BaseUnitTest {
   @Override
   public void setUp() throws Exception {
     super.setUp();
-    masterCipher = new MasterCipher(masterSecret);
+    //masterCipher = new MasterCipher(masterSecret);
   }
 
-  @Test(expected = InvalidMessageException.class)
+  //@Test(expected = InvalidMessageException.class)
   public void testEncryptBytesWithZeroBody() throws Exception {
     masterCipher.decryptBytes(new byte[]{});
   }
