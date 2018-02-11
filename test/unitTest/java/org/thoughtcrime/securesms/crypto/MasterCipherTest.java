@@ -21,4 +21,5 @@ public class MasterCipherTest extends BaseUnitTest {
   public void testEncryptBytesWithZeroBody() throws Exception {
     masterCipher.decryptBytes(new byte[]{});
   }
+
 }
