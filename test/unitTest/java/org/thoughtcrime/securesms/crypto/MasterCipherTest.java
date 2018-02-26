@@ -6,6 +6,14 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.thoughtcrime.securesms.BaseUnitTest;
 import org.whispersystems.libsignal.InvalidMessageException;
 
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+
+import static junit.framework.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 @PowerMockIgnore("javax.crypto.*")
 public class MasterCipherTest extends BaseUnitTest {
   private MasterCipher masterCipher;
@@ -20,5 +28,33 @@ public class MasterCipherTest extends BaseUnitTest {
   @Test(expected = InvalidMessageException.class)
   public void testEncryptBytesWithZeroBody() throws Exception {
     masterCipher.decryptBytes(new byte[]{});
+  }
+
+
+  @Test
+  public void testEncryptDecryptBytes(){
+
+    MasterCipher cipher = new MasterCipher(masterSecret);
+
+    String test = "hello";
+
+
+    String encrypted = cipher.encryptBody(test);
+
+    assertNotEquals(test, encrypted);
+
+    try{
+      String decrypted = cipher.decryptBody(encrypted);
+      assertNotEquals(decrypted, encrypted);
+
+      assertEquals(test, decrypted);
+
+    }catch(Exception e){
+
+    }
+
+
+
+
   }
 }
