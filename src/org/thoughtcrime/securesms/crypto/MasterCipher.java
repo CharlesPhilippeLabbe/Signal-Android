@@ -56,17 +56,25 @@ import javax.crypto.spec.SecretKeySpec;
 public class MasterCipher {
 
   private final MasterSecret masterSecret;
-  private final Cipher encryptingCipher;
-  private final Cipher decryptingCipher;
+  private final EncryptCipher encryptingCipher;
+  private final DecryptCipher decryptingCipher;
   private final Mac hmac;
+
+  public MasterCipher(MasterSecret masterSecret, EncryptCipher encryptingCipher, DecryptCipher decryptingCipher, Mac hmac){
+    this.masterSecret = masterSecret;
+    this.encryptingCipher = encryptingCipher;
+    this.decryptingCipher =decryptingCipher;
+    this.hmac = hmac;
+  }
 	
   public MasterCipher(MasterSecret masterSecret) {
-    try {
-      this.masterSecret = masterSecret;		
-      this.encryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-      this.decryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+
+      this.masterSecret = masterSecret;
+      this.encryptingCipher = new EncryptCipherAdapter();
+      this.decryptingCipher = new DecryptCipherAdapter();
+      try {
       this.hmac             = Mac.getInstance("HmacSHA1");
-    } catch (NoSuchPaddingException | NoSuchAlgorithmException nspe) {
+    } catch (NoSuchAlgorithmException nspe) {
       throw new AssertionError(nspe);
     }
   }
@@ -97,8 +105,8 @@ public class MasterCipher {
     try {
       Mac mac              = getMac(masterSecret.getMacKey());
       byte[] encryptedBody = verifyMacBody(mac, decodedBody);
-			
-      Cipher cipher        = getDecryptingCipher(masterSecret.getEncryptionKey(), encryptedBody);
+
+      DecryptCipher cipher        = getDecryptingCipher(masterSecret.getEncryptionKey(), encryptedBody);
       byte[] encrypted     = getDecryptedBody(cipher, encryptedBody);
 			
       return encrypted;
@@ -109,7 +117,7 @@ public class MasterCipher {
 	
   public byte[] encryptBytes(byte[] body) {
     try {
-      Cipher cipher              = getEncryptingCipher(masterSecret.getEncryptionKey());
+        EncryptCipher cipher              = getEncryptingCipher(masterSecret.getEncryptionKey());
       Mac    mac                 = getMac(masterSecret.getMacKey());
 		
       byte[] encryptedBody       = getEncryptedBody(cipher, body);
@@ -173,11 +181,11 @@ public class MasterCipher {
     return encrypted;
   }
 	
-  private byte[] getDecryptedBody(Cipher cipher, byte[] encryptedBody) throws IllegalBlockSizeException, BadPaddingException {
+  private byte[] getDecryptedBody(DecryptCipher cipher, byte[] encryptedBody) throws IllegalBlockSizeException, BadPaddingException {
     return cipher.doFinal(encryptedBody, cipher.getBlockSize(), encryptedBody.length - cipher.getBlockSize());
   }
 	
-  private byte[] getEncryptedBody(Cipher cipher, byte[] body) throws IllegalBlockSizeException, BadPaddingException {
+  private byte[] getEncryptedBody(EncryptCipher cipher, byte[] body) throws IllegalBlockSizeException, BadPaddingException {
     byte[] encrypted = cipher.doFinal(body);
     byte[] iv        = cipher.getIV();
 		
@@ -205,7 +213,7 @@ public class MasterCipher {
     return encryptedAndMac;
   }
 	
-  private Cipher getDecryptingCipher(SecretKeySpec key, byte[] encryptedBody) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, NoSuchPaddingException {
+  private DecryptCipher getDecryptingCipher(SecretKeySpec key, byte[] encryptedBody) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, NoSuchPaddingException {
     //		Cipher cipher      = Cipher.getInstance("AES/CBC/PKCS5Padding");
     IvParameterSpec iv = new IvParameterSpec(encryptedBody, 0, decryptingCipher.getBlockSize());
     decryptingCipher.init(Cipher.DECRYPT_MODE, key, iv);
@@ -213,7 +221,7 @@ public class MasterCipher {
     return decryptingCipher;
   }
 	
-  private Cipher getEncryptingCipher(SecretKeySpec key) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException {
+  private EncryptCipher getEncryptingCipher(SecretKeySpec key) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException {
     //		Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
     encryptingCipher.init(Cipher.ENCRYPT_MODE, key);
 		
