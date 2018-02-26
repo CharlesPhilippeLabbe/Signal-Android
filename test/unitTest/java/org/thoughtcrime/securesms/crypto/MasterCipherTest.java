@@ -34,7 +34,10 @@ public class MasterCipherTest extends BaseUnitTest {
   @Test
   public void testEncryptDecryptBytes(){
 
-    MasterCipher cipher = new MasterCipher(masterSecret);
+    EncryptCipherFake encryptCipher = new EncryptCipherFake();
+    DecryptCipherFake decryptCipher = new DecryptCipherFake();
+
+    MasterCipher cipher = new MasterCipher(masterSecret, encryptCipher, decryptCipher);
 
     String test = "hello";
 

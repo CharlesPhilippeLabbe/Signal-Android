@@ -60,11 +60,15 @@ public class MasterCipher {
   private final DecryptCipher decryptingCipher;
   private final Mac hmac;
 
-  public MasterCipher(MasterSecret masterSecret, EncryptCipher encryptingCipher, DecryptCipher decryptingCipher, Mac hmac){
+  public MasterCipher(MasterSecret masterSecret, EncryptCipher encryptingCipher, DecryptCipher decryptingCipher){
     this.masterSecret = masterSecret;
     this.encryptingCipher = encryptingCipher;
     this.decryptingCipher =decryptingCipher;
-    this.hmac = hmac;
+      try {
+          this.hmac             = Mac.getInstance("HmacSHA1");
+      } catch (NoSuchAlgorithmException nspe) {
+          throw new AssertionError(nspe);
+      }
   }
 	
   public MasterCipher(MasterSecret masterSecret) {
@@ -192,7 +196,6 @@ public class MasterCipher {
     byte[] ivAndBody = new byte[iv.length + encrypted.length];
     System.arraycopy(iv, 0, ivAndBody, 0, iv.length);
     System.arraycopy(encrypted, 0, ivAndBody, iv.length, encrypted.length);
-		
     return ivAndBody;
   }
 	
