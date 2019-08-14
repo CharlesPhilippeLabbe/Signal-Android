@@ -5,7 +5,7 @@
         android:id="@+id/container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/reminder_background"
+        android:background="@drawable/reminder_background_normal"
         android:focusable="true"
         android:nextFocusRight="@+id/cancel"
         android:orientation="horizontal"
@@ -13,8 +13,7 @@
 
     <ImageView android:layout_width="wrap_content"
                android:layout_height="wrap_content"
-               android:layout_marginLeft="16dp"
-
+               android:layout_marginStart="16dp"
                android:layout_gravity="center_vertical"
                android:src="@drawable/ic_alert"/>
 

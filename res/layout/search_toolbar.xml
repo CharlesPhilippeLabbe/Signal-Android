@@ -6,14 +6,14 @@
        tools:parentTag="android.widget.LinearLayout"
        tools:orientation="vertical">
 
-    <android.support.v7.widget.Toolbar
+    <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/search_toolbar_background"/>
 
     <View android:layout_width="match_parent"
-          android:layout_height="7dp"
+          android:layout_height="4dp"
           android:background="@drawable/search_toolbar_shadow"/>
 
 </merge>

@@ -5,9 +5,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
-import android.support.v4.app.NotificationManagerCompat;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.core.app.NotificationManagerCompat;
 
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
@@ -20,6 +19,7 @@ import org.thoughtcrime.securesms.database.MessagingDatabase.MarkedMessageInfo;
 import org.thoughtcrime.securesms.database.MessagingDatabase.SyncMessageId;
 import org.thoughtcrime.securesms.jobs.MultiDeviceReadUpdateJob;
 import org.thoughtcrime.securesms.jobs.SendReadReceiptJob;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.service.ExpiringMessageManager;
 
 import java.util.LinkedList;
@@ -50,7 +50,7 @@ public class MarkReadReceiver extends BroadcastReceiver {
           List<MarkedMessageInfo> messageIdsCollection = new LinkedList<>();
 
           for (long threadId : threadIds) {
-            Log.w(TAG, "Marking as read: " + threadId);
+            Log.i(TAG, "Marking as read: " + threadId);
             List<MarkedMessageInfo> messageIds = DatabaseFactory.getThreadDatabase(context).setRead(threadId, true);
             messageIdsCollection.addAll(messageIds);
           }
@@ -77,7 +77,7 @@ public class MarkReadReceiver extends BroadcastReceiver {
 
     ApplicationContext.getInstance(context)
                       .getJobManager()
-                      .add(new MultiDeviceReadUpdateJob(context, syncMessageIds));
+                      .add(new MultiDeviceReadUpdateJob(syncMessageIds));
 
     Map<Address, List<SyncMessageId>> addressMap = Stream.of(markedReadMessages)
                                                          .map(MarkedMessageInfo::getSyncMessageId)
@@ -88,7 +88,7 @@ public class MarkReadReceiver extends BroadcastReceiver {
 
       ApplicationContext.getInstance(context)
                         .getJobManager()
-                        .add(new SendReadReceiptJob(context, address, timestamps));
+                        .add(new SendReadReceiptJob(address, timestamps));
     }
   }
 

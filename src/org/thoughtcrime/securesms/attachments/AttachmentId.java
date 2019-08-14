@@ -1,13 +1,20 @@
 package org.thoughtcrime.securesms.attachments;
 
+import androidx.annotation.NonNull;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import org.thoughtcrime.securesms.util.Util;
 
 public class AttachmentId {
 
+  @JsonProperty
   private final long rowId;
+
+  @JsonProperty
   private final long uniqueId;
 
-  public AttachmentId(long rowId, long uniqueId) {
+  public AttachmentId(@JsonProperty("rowId") long rowId, @JsonProperty("uniqueId") long uniqueId) {
     this.rowId    = rowId;
     this.uniqueId = uniqueId;
   }
@@ -24,7 +31,7 @@ public class AttachmentId {
     return new String[] {String.valueOf(rowId), String.valueOf(uniqueId)};
   }
 
-  public String toString() {
+  public @NonNull String toString() {
     return "(row id: " + rowId + ", unique ID: " + uniqueId + ")";
   }
 

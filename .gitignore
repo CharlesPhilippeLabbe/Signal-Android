@@ -8,7 +8,6 @@ gen/
 *.iml
 out
 tests
-lint.xml
 local.properties
 ant.properties
 .DS_Store
@@ -24,3 +23,4 @@ test/androidTestEspresso/res/values/arrays.xml
 obj/
 jni/libspeex/.deps/
 *.sh
+pkcs11.password

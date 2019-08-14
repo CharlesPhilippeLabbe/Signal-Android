@@ -16,19 +16,45 @@
  */
 package org.thoughtcrime.securesms.util;
 
+import android.os.Parcel;
+import androidx.annotation.NonNull;
+
 public abstract class CharacterCalculator {
 
   public abstract CharacterState calculateCharacters(String messageBody);
 
-  public static class CharacterState {
-    public int charactersRemaining;
-    public int messagesSpent;
-    public int maxMessageSize;
+  public static CharacterCalculator readFromParcel(@NonNull Parcel in) {
+    switch (in.readInt()) {
+      case 1:  return new SmsCharacterCalculator();
+      case 2:  return new MmsCharacterCalculator();
+      case 3:  return new PushCharacterCalculator();
+      default: throw new IllegalArgumentException("Read an unsupported value for a calculator.");
+    }
+  }
 
-    public CharacterState(int messagesSpent, int charactersRemaining, int maxMessageSize) {
-      this.messagesSpent       = messagesSpent;
-      this.charactersRemaining = charactersRemaining;
-      this.maxMessageSize      = maxMessageSize;
+  public static void writeToParcel(@NonNull Parcel dest, @NonNull CharacterCalculator calculator) {
+    if (calculator instanceof SmsCharacterCalculator) {
+      dest.writeInt(1);
+    } else if (calculator instanceof MmsCharacterCalculator) {
+      dest.writeInt(2);
+    } else if (calculator instanceof PushCharacterCalculator) {
+      dest.writeInt(3);
+    } else {
+      throw new IllegalArgumentException("Tried to write an unsupported calculator to a parcel.");
+    }
+  }
+
+  public static class CharacterState {
+    public final int charactersRemaining;
+    public final int messagesSpent;
+    public final int maxTotalMessageSize;
+    public final int maxPrimaryMessageSize;
+
+    public CharacterState(int messagesSpent, int charactersRemaining, int maxTotalMessageSize, int maxPrimaryMessageSize) {
+      this.messagesSpent         = messagesSpent;
+      this.charactersRemaining   = charactersRemaining;
+      this.maxTotalMessageSize   = maxTotalMessageSize;
+      this.maxPrimaryMessageSize = maxPrimaryMessageSize;
     }
   }
 }

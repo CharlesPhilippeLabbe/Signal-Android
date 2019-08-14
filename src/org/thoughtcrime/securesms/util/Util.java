@@ -25,22 +25,19 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Telephony;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.annotation.RequiresPermission;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresPermission;
 import android.telephony.TelephonyManager;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.style.StyleSpan;
-import android.util.Log;
-import android.widget.EditText;
 
 import com.google.android.mms.pdu_alt.CharacterSets;
 import com.google.android.mms.pdu_alt.EncodedStringValue;
@@ -49,23 +46,28 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import com.google.i18n.phonenumbers.Phonenumber;
 
 import org.thoughtcrime.securesms.BuildConfig;
+import org.thoughtcrime.securesms.components.ComposeText;
 import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.OutgoingLegacyMmsConnection;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -74,7 +76,7 @@ import java.util.concurrent.TimeUnit;
 public class Util {
   private static final String TAG = Util.class.getSimpleName();
 
-  public static Handler handler = new Handler(Looper.getMainLooper());
+  private static volatile Handler handler;
 
   public static <T> List<T> asList(T... elements) {
     List<T> result = new LinkedList<>();
@@ -126,8 +128,36 @@ public class Util {
     return value == null || value.length == 0;
   }
 
-  public static boolean isEmpty(EditText value) {
-    return value == null || value.getText() == null || TextUtils.isEmpty(value.getText().toString());
+  public static boolean isEmpty(ComposeText value) {
+    return value == null || value.getText() == null || TextUtils.isEmpty(value.getTextTrimmed());
+  }
+
+  public static boolean isEmpty(Collection collection) {
+    return collection == null || collection.isEmpty();
+  }
+
+  public static <K, V> V getOrDefault(@NonNull Map<K, V> map, K key, V defaultValue) {
+    return map.containsKey(key) ? map.get(key) : defaultValue;
+  }
+
+  public static String getFirstNonEmpty(String... values) {
+    for (String value : values) {
+      if (!TextUtils.isEmpty(value)) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  public static <E> List<List<E>> chunk(@NonNull List<E> list, int chunkSize) {
+    List<List<E>> chunks = new ArrayList<>(list.size() / chunkSize);
+
+    for (int i = 0; i < list.size(); i += chunkSize) {
+      List<E> chunk = list.subList(i, Math.min(list.size(), i + chunkSize));
+      chunks.add(chunk);
+    }
+
+    return chunks;
   }
 
   public static CharSequence getBoldedString(String value) {
@@ -171,17 +201,9 @@ public class Util {
     }
   }
 
-  public static void close(InputStream in) {
+  public static void close(Closeable closeable) {
     try {
-      in.close();
-    } catch (IOException e) {
-      Log.w(TAG, e);
-    }
-  }
-
-  public static void close(OutputStream out) {
-    try {
-      out.close();
+      closeable.close();
     } catch (IOException e) {
       Log.w(TAG, e);
     }
@@ -205,6 +227,22 @@ public class Util {
     if (address.isEmail()) return false;
 
     return TextSecurePreferences.getLocalNumber(context).equals(address.toPhoneString());
+  }
+
+  public static void readFully(InputStream in, byte[] buffer) throws IOException {
+    readFully(in, buffer, buffer.length);
+  }
+
+  public static void readFully(InputStream in, byte[] buffer, int len) throws IOException {
+    int offset = 0;
+
+    for (;;) {
+      int read = in.read(buffer, offset, len - offset);
+      if (read == -1) throw new EOFException("Stream ended early");
+
+      if (read + offset < len) offset += read;
+      else                		 return;
+    }
   }
 
   public static byte[] readFully(InputStream in) throws IOException {
@@ -327,11 +365,27 @@ public class Util {
 
   @SuppressLint("NewApi")
   public static boolean isDefaultSmsProvider(Context context){
-    return (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) ||
-      (context.getPackageName().equals(Telephony.Sms.getDefaultSmsPackage(context)));
+    return context.getPackageName().equals(Telephony.Sms.getDefaultSmsPackage(context));
   }
 
-  public static int getCurrentApkReleaseVersion(Context context) {
+  /**
+   * The app version.
+   * <p>
+   * This code should be used in all places that compare app versions rather than
+   * {@link #getManifestApkVersion(Context)} or {@link BuildConfig#VERSION_CODE}.
+   */
+  public static int getCanonicalVersionCode() {
+    return BuildConfig.CANONICAL_VERSION_CODE;
+  }
+
+  /**
+   * {@link BuildConfig#VERSION_CODE} may not be the actual version due to ABI split code adding a
+   * postfix after BuildConfig is generated.
+   * <p>
+   * However, in most cases you want to use {@link BuildConfig#CANONICAL_VERSION_CODE} via
+   * {@link #getCanonicalVersionCode()}
+   */
+  public static int getManifestApkVersion(Context context) {
     try {
       return context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionCode;
     } catch (PackageManager.NameNotFoundException e) {
@@ -351,15 +405,11 @@ public class Util {
   }
 
   public static SecureRandom getSecureRandom() {
-    try {
-      return SecureRandom.getInstance("SHA1PRNG");
-    } catch (NoSuchAlgorithmException e) {
-      throw new AssertionError(e);
-    }
+    return new SecureRandom();
   }
 
   public static int getDaysTillBuildExpiry() {
-    int age = (int)TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - BuildConfig.BUILD_TIMESTAMP);
+    int age = (int) TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - BuildConfig.BUILD_TIMESTAMP);
     return 90 - age;
   }
 
@@ -378,13 +428,21 @@ public class Util {
     }
   }
 
+  public static void postToMain(final @NonNull Runnable runnable) {
+    getHandler().post(runnable);
+  }
+
   public static void runOnMain(final @NonNull Runnable runnable) {
     if (isMainThread()) runnable.run();
-    else                handler.post(runnable);
+    else                getHandler().post(runnable);
   }
 
   public static void runOnMainDelayed(final @NonNull Runnable runnable, long delayMillis) {
-    handler.postDelayed(runnable, delayMillis);
+    getHandler().postDelayed(runnable, delayMillis);
+  }
+
+  public static void cancelRunnableOnMain(@NonNull Runnable runnable) {
+    getHandler().removeCallbacks(runnable);
   }
 
   public static void runOnMainSync(final @NonNull Runnable runnable) {
@@ -408,11 +466,7 @@ public class Util {
   }
 
   public static <T> T getRandomElement(T[] elements) {
-    try {
-      return elements[SecureRandom.getInstance("SHA1PRNG").nextInt(elements.length)];
-    } catch (NoSuchAlgorithmException e) {
-      throw new AssertionError(e);
-    }
+    return elements[new SecureRandom().nextInt(elements.length)];
   }
 
   public static boolean equals(@Nullable Object a, @Nullable Object b) {
@@ -486,5 +540,24 @@ public class Util {
     int      digitGroups = (int) (Math.log10(sizeBytes) / Math.log10(1024));
 
     return new DecimalFormat("#,##0.#").format(sizeBytes/Math.pow(1024, digitGroups)) + " " + units[digitGroups];
+  }
+
+  public static void sleep(long millis) {
+    try {
+      Thread.sleep(millis);
+    } catch (InterruptedException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  private static Handler getHandler() {
+    if (handler == null) {
+      synchronized (Util.class) {
+        if (handler == null) {
+          handler = new Handler(Looper.getMainLooper());
+        }
+      }
+    }
+    return handler;
   }
 }

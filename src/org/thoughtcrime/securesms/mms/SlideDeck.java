@@ -17,8 +17,10 @@
 package org.thoughtcrime.securesms.mms;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.annimon.stream.Stream;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.util.MediaUtil;
@@ -31,14 +33,14 @@ public class SlideDeck {
 
   private final List<Slide> slides = new LinkedList<>();
 
-  public SlideDeck(Context context, List<Attachment> attachments) {
+  public SlideDeck(@NonNull Context context, @NonNull List<? extends Attachment> attachments) {
     for (Attachment attachment : attachments) {
       Slide slide = MediaUtil.getSlideForAttachment(context, attachment);
       if (slide != null) slides.add(slide);
     }
   }
 
-  public SlideDeck(Context context, Attachment attachment) {
+  public SlideDeck(@NonNull Context context, @NonNull Attachment attachment) {
     Slide slide = MediaUtil.getSlideForAttachment(context, attachment);
     if (slide != null) slides.add(slide);
   }
@@ -86,7 +88,7 @@ public class SlideDeck {
 
   public boolean containsMediaSlide() {
     for (Slide slide : slides) {
-      if (slide.hasImage() || slide.hasVideo() || slide.hasAudio() || slide.hasDocument()) {
+      if (slide.hasImage() || slide.hasVideo() || slide.hasAudio() || slide.hasDocument() || slide.hasSticker()) {
         return true;
       }
     }
@@ -103,6 +105,10 @@ public class SlideDeck {
     return null;
   }
 
+  public @NonNull List<Slide> getThumbnailSlides() {
+    return Stream.of(slides).filter(Slide::hasImage).toList();
+  }
+
   public @Nullable AudioSlide getAudioSlide() {
     for (Slide slide : slides) {
       if (slide.hasAudio()) {
@@ -117,6 +123,26 @@ public class SlideDeck {
     for (Slide slide: slides) {
       if (slide.hasDocument()) {
         return (DocumentSlide)slide;
+      }
+    }
+
+    return null;
+  }
+
+  public @Nullable TextSlide getTextSlide() {
+    for (Slide slide: slides) {
+      if (MediaUtil.isLongTextType(slide.getContentType())) {
+        return (TextSlide)slide;
+      }
+    }
+
+    return null;
+  }
+
+  public @Nullable StickerSlide getStickerSlide() {
+    for (Slide slide: slides) {
+      if (slide.hasSticker()) {
+        return (StickerSlide)slide;
       }
     }
 

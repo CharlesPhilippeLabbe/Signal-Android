@@ -1,8 +1,13 @@
 package org.thoughtcrime.securesms.jobs;
 
 import android.content.Context;
+import androidx.annotation.NonNull;
 import android.text.TextUtils;
-import android.util.Log;
+
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 import android.webkit.MimeTypeMap;
 
 import com.android.mms.dom.smil.parser.SmilXmlSerializer;
@@ -20,13 +25,11 @@ import com.google.android.mms.smil.SmilHelper;
 import com.klinker.android.send_message.Utils;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
-import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MmsDatabase;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
-import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirement;
 import org.thoughtcrime.securesms.mms.CompatMmsConnection;
 import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.mms.MmsException;
@@ -41,8 +44,6 @@ import org.thoughtcrime.securesms.util.Hex;
 import org.thoughtcrime.securesms.util.NumberUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -51,34 +52,51 @@ import java.util.List;
 
 public class MmsSendJob extends SendJob {
 
-  private static final long serialVersionUID = 0L;
+  public static final String KEY = "MmsSendJob";
 
   private static final String TAG = MmsSendJob.class.getSimpleName();
 
-  private final long messageId;
+  private static final String KEY_MESSAGE_ID = "message_id";
 
-  public MmsSendJob(Context context, long messageId) {
-    super(context, JobParameters.newBuilder()
-                                .withGroupId("mms-operation")
-                                .withRequirement(new NetworkRequirement(context))
-                                .withRequirement(new MasterSecretRequirement(context))
-                                .withPersistence()
-                                .create());
+  private long messageId;
 
+  public MmsSendJob(long messageId) {
+    this(new Job.Parameters.Builder()
+                           .setQueue("mms-operation")
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setMaxAttempts(15)
+                           .build(),
+         messageId);
+  }
+
+  private MmsSendJob(@NonNull Job.Parameters parameters, long messageId) {
+    super(parameters);
     this.messageId = messageId;
   }
 
   @Override
-  public void onAdded() {
-
+  public @NonNull Data serialize() {
+    return new Data.Builder().putLong(KEY_MESSAGE_ID, messageId).build();
   }
 
   @Override
-  public void onSend(MasterSecret masterSecret) throws MmsException, NoSuchMessageException, IOException {
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
+
+  @Override
+  public void onSend() throws MmsException, NoSuchMessageException, IOException {
     MmsDatabase          database = DatabaseFactory.getMmsDatabase(context);
     OutgoingMediaMessage message  = database.getOutgoingMessage(messageId);
 
+    if (database.isSent(messageId)) {
+      Log.w(TAG, "Message " + messageId + " was already sent. Ignoring.");
+      return;
+    }
+
     try {
+      Log.i(TAG, "Sending message: " + messageId);
+
       SendReq pdu = constructSendPdu(message);
 
       validateDestinations(message, pdu);
@@ -89,6 +107,8 @@ public class MmsSendJob extends SendJob {
 
       database.markAsSent(messageId, false);
       markAttachmentsUploaded(messageId, message.getAttachments());
+
+      Log.i(TAG, "Sent message: " + messageId);
     } catch (UndeliverableMessageException | IOException e) {
       Log.w(TAG, e);
       database.markAsSentFailed(messageId);
@@ -101,12 +121,13 @@ public class MmsSendJob extends SendJob {
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
+  public boolean onShouldRetry(@NonNull Exception exception) {
     return false;
   }
 
   @Override
   public void onCanceled() {
+    Log.i(TAG, "onCanceled() messageId: " + messageId);
     DatabaseFactory.getMmsDatabase(context).markAsSentFailed(messageId);
     notifyMediaMessageDeliveryFailed(context, messageId);
   }
@@ -138,8 +159,8 @@ public class MmsSendJob extends SendJob {
   }
 
   private boolean isInconsistentResponse(SendReq message, SendConf response) {
-    Log.w(TAG, "Comparing: " + Hex.toString(message.getTransactionId()));
-    Log.w(TAG, "With:      " + Hex.toString(response.getTransactionId()));
+    Log.i(TAG, "Comparing: " + Hex.toString(message.getTransactionId()));
+    Log.i(TAG, "With:      " + Hex.toString(response.getTransactionId()));
     return !Arrays.equals(message.getTransactionId(), response.getTransactionId());
   }
 
@@ -175,7 +196,7 @@ public class MmsSendJob extends SendJob {
     String           lineNumber        = getMyNumber(context);
     Address          destination       = message.getRecipient().getAddress();
     MediaConstraints mediaConstraints  = MediaConstraints.getMmsMediaConstraints(message.getSubscriptionId());
-    List<Attachment> scaledAttachments = scaleAttachments(mediaConstraints, message.getAttachments());
+    List<Attachment> scaledAttachments = scaleAndStripExifFromAttachments(mediaConstraints, message.getAttachments());
 
     if (!TextUtils.isEmpty(lineNumber)) {
       req.setFrom(new EncodedStringValue(lineNumber));
@@ -293,6 +314,13 @@ public class MmsSendJob extends SendJob {
       return Utils.getMyPhoneNumber(context);
     } catch (SecurityException e) {
       throw new UndeliverableMessageException(e);
+    }
+  }
+
+  public static class Factory implements Job.Factory<MmsSendJob> {
+    @Override
+    public @NonNull MmsSendJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new MmsSendJob(parameters, data.getLong(KEY_MESSAGE_ID));
     }
   }
 }

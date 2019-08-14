@@ -5,16 +5,16 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.support.annotation.NonNull;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import org.thoughtcrime.securesms.logging.Log;
 import android.util.Pair;
 
-import org.thoughtcrime.securesms.providers.PersistentBlobProvider;
+import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.util.MediaUtil;
-import org.thoughtcrime.securesms.util.ThreadUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.concurrent.ListenableFuture;
 import org.thoughtcrime.securesms.util.concurrent.SettableFuture;
+import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -24,24 +24,22 @@ public class AudioRecorder {
 
   private static final String TAG = AudioRecorder.class.getSimpleName();
 
-  private static final ExecutorService executor = ThreadUtil.newDynamicSingleThreadedExecutor();
+  private static final ExecutorService executor = SignalExecutors.newCachedSingleThreadExecutor("signal-AudioRecorder");
 
-  private final Context                context;
-  private final PersistentBlobProvider blobProvider;
+  private final Context context;
 
   private AudioCodec audioCodec;
   private Uri        captureUri;
 
   public AudioRecorder(@NonNull Context context) {
-    this.context      = context;
-    this.blobProvider = PersistentBlobProvider.getInstance(context.getApplicationContext());
+    this.context = context;
   }
 
   public void startRecording() {
-    Log.w(TAG, "startRecording()");
+    Log.i(TAG, "startRecording()");
 
     executor.execute(() -> {
-      Log.w(TAG, "Running startRecording() + " + Thread.currentThread().getId());
+      Log.i(TAG, "Running startRecording() + " + Thread.currentThread().getId());
       try {
         if (audioCodec != null) {
           throw new AssertionError("We can only record once at a time.");
@@ -49,9 +47,11 @@ public class AudioRecorder {
 
         ParcelFileDescriptor fds[] = ParcelFileDescriptor.createPipe();
 
-        captureUri  = blobProvider.create(context, new ParcelFileDescriptor.AutoCloseInputStream(fds[0]),
-                                          MediaUtil.AUDIO_AAC, null, null);
-        audioCodec  = new AudioCodec();
+        captureUri = BlobProvider.getInstance()
+                                 .forData(new ParcelFileDescriptor.AutoCloseInputStream(fds[0]), 0)
+                                 .withMimeType(MediaUtil.AUDIO_AAC)
+                                 .createForSingleSessionOnDiskAsync(context, () -> Log.i(TAG, "Write successful."), e -> Log.w(TAG, "Error during recording", e));
+        audioCodec = new AudioCodec();
 
         audioCodec.start(new ParcelFileDescriptor.AutoCloseOutputStream(fds[1]));
       } catch (IOException e) {
@@ -61,7 +61,7 @@ public class AudioRecorder {
   }
 
   public @NonNull ListenableFuture<Pair<Uri, Long>> stopRecording() {
-    Log.w(TAG, "stopRecording()");
+    Log.i(TAG, "stopRecording()");
 
     final SettableFuture<Pair<Uri, Long>> future = new SettableFuture<>();
 

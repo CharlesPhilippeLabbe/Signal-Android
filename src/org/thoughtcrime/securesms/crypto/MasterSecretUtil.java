@@ -19,10 +19,10 @@ package org.thoughtcrime.securesms.crypto;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 
 import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.Util;
@@ -264,8 +264,8 @@ public class MasterSecretUtil {
     }
   }
 
-  private static byte[] generateSalt() throws NoSuchAlgorithmException {
-    SecureRandom random = SecureRandom.getInstance("SHA1PRNG");
+  private static byte[] generateSalt() {
+    SecureRandom random = new SecureRandom();
     byte[] salt         = new byte[16];
     random.nextBytes(salt);
 

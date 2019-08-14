@@ -4,9 +4,9 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.NotificationCompat;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
 
 import org.thoughtcrime.securesms.ConversationListActivity;
 import org.thoughtcrime.securesms.R;
@@ -30,8 +30,11 @@ public class MultipleRecipientNotificationBuilder extends AbstractNotificationBu
     setContentTitle(context.getString(R.string.app_name));
     setContentIntent(PendingIntent.getActivity(context, 0, new Intent(context, ConversationListActivity.class), 0));
     setCategory(NotificationCompat.CATEGORY_MESSAGE);
-    setPriority(TextSecurePreferences.getNotificationPriority(context));
     setGroupSummary(true);
+
+    if (!NotificationChannels.supported()) {
+      setPriority(TextSecurePreferences.getNotificationPriority(context));
+    }
   }
 
   public void setMessageCount(int messageCount, int threadCount) {
@@ -45,6 +48,10 @@ public class MultipleRecipientNotificationBuilder extends AbstractNotificationBu
     if (privacy.isDisplayContact()) {
       setContentText(context.getString(R.string.MessageNotifier_most_recent_from_s,
                                        recipient.toShortString()));
+    }
+
+    if (recipient.getNotificationChannel() != null) {
+      setChannelId(recipient.getNotificationChannel());
     }
   }
 
@@ -74,7 +81,7 @@ public class MultipleRecipientNotificationBuilder extends AbstractNotificationBu
       NotificationCompat.InboxStyle style = new NotificationCompat.InboxStyle();
 
       for (CharSequence body : messageBodies) {
-        style.addLine(body);
+        style.addLine(trimToDisplayLength(body));
       }
 
       setStyle(style);

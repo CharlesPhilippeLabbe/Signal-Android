@@ -21,16 +21,14 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.database.Cursor;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.Loader;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.Loader;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -45,7 +43,9 @@ import org.thoughtcrime.securesms.components.RecyclerViewFastScroller;
 import org.thoughtcrime.securesms.contacts.ContactSelectionListAdapter;
 import org.thoughtcrime.securesms.contacts.ContactSelectionListItem;
 import org.thoughtcrime.securesms.contacts.ContactsCursorLoader;
+import org.thoughtcrime.securesms.contacts.ContactsCursorLoader.DisplayMode;
 import org.thoughtcrime.securesms.database.CursorRecyclerViewAdapter;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.util.DirectoryHelper;
@@ -75,12 +75,7 @@ public class ContactSelectionListFragment extends    Fragment
   public static final String REFRESHABLE  = "refreshable";
   public static final String RECENTS      = "recents";
 
-  public final static int DISPLAY_MODE_ALL       = ContactsCursorLoader.MODE_ALL;
-  public final static int DISPLAY_MODE_PUSH_ONLY = ContactsCursorLoader.MODE_PUSH_ONLY;
-  public final static int DISPLAY_MODE_SMS_ONLY  = ContactsCursorLoader.MODE_SMS_ONLY;
-
-  private TextView emptyText;
-
+  private TextView                  emptyText;
   private Set<String>               selectedContacts;
   private OnContactSelectedListener onContactSelectedListener;
   private SwipeRefreshLayout        swipeRefresh;
@@ -126,7 +121,7 @@ public class ContactSelectionListFragment extends    Fragment
   }
 
   @Override
-  public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+  public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
     View view = inflater.inflate(R.layout.contact_selection_list_fragment, container, false);
 
     emptyText               = ViewUtil.findById(view, android.R.id.empty);
@@ -139,8 +134,7 @@ public class ContactSelectionListFragment extends    Fragment
     showContactsProgress    = view.findViewById(R.id.progress);
     recyclerView.setLayoutManager(new LinearLayoutManager(getActivity()));
 
-    swipeRefresh.setEnabled(getActivity().getIntent().getBooleanExtra(REFRESHABLE, true) &&
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN);
+    swipeRefresh.setEnabled(getActivity().getIntent().getBooleanExtra(REFRESHABLE, true));
 
     return view;
   }
@@ -219,14 +213,14 @@ public class ContactSelectionListFragment extends    Fragment
   }
 
   @Override
-  public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+  public @NonNull Loader<Cursor> onCreateLoader(int id, Bundle args) {
     return new ContactsCursorLoader(getActivity(),
-                                    getActivity().getIntent().getIntExtra(DISPLAY_MODE, DISPLAY_MODE_ALL),
+                                    getActivity().getIntent().getIntExtra(DISPLAY_MODE, DisplayMode.FLAG_ALL),
                                     cursorFilter, getActivity().getIntent().getBooleanExtra(RECENTS, false));
   }
 
   @Override
-  public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+  public void onLoadFinished(@NonNull Loader<Cursor> loader, Cursor data) {
     swipeRefresh.setVisibility(View.VISIBLE);
     showContactsLayout.setVisibility(View.GONE);
 
@@ -241,7 +235,7 @@ public class ContactSelectionListFragment extends    Fragment
   }
 
   @Override
-  public void onLoaderReset(Loader<Cursor> loader) {
+  public void onLoaderReset(@NonNull Loader<Cursor> loader) {
     ((CursorRecyclerViewAdapter) recyclerView.getAdapter()).changeCursor(null);
     fastScroller.setVisibility(View.GONE);
   }

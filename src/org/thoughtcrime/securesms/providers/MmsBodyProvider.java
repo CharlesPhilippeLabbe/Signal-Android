@@ -24,7 +24,9 @@ import android.content.UriMatcher;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
-import android.util.Log;
+import androidx.annotation.NonNull;
+
+import org.thoughtcrime.securesms.logging.Log;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -56,12 +58,12 @@ public class MmsBodyProvider extends ContentProvider {
   }
 
   @Override
-  public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-    Log.w(TAG, "openFile(" + uri + ", " + mode + ")");
+  public ParcelFileDescriptor openFile(@NonNull Uri uri, @NonNull String mode) throws FileNotFoundException {
+    Log.i(TAG, "openFile(" + uri + ", " + mode + ")");
 
     switch (uriMatcher.match(uri)) {
     case SINGLE_ROW:
-      Log.w(TAG, "Fetching message body for a single row...");
+      Log.i(TAG, "Fetching message body for a single row...");
       File tmpFile = getFile(uri);
 
       final int fileMode;
@@ -73,7 +75,7 @@ public class MmsBodyProvider extends ContentProvider {
       default:  throw new IllegalArgumentException("requested file mode unsupported");
       }
 
-      Log.w(TAG, "returning file " + tmpFile.getAbsolutePath());
+      Log.i(TAG, "returning file " + tmpFile.getAbsolutePath());
       return ParcelFileDescriptor.open(tmpFile, fileMode);
     }
 
@@ -81,7 +83,7 @@ public class MmsBodyProvider extends ContentProvider {
   }
 
   @Override
-  public int delete(Uri uri, String arg1, String[] arg2) {
+  public int delete(@NonNull Uri uri, String arg1, String[] arg2) {
     switch (uriMatcher.match(uri)) {
     case SINGLE_ROW:
       return getFile(uri).delete() ? 1 : 0;
@@ -90,22 +92,22 @@ public class MmsBodyProvider extends ContentProvider {
   }
 
   @Override
-  public String getType(Uri arg0) {
+  public String getType(@NonNull Uri arg0) {
     return null;
   }
 
   @Override
-  public Uri insert(Uri arg0, ContentValues arg1) {
+  public Uri insert(@NonNull Uri arg0, ContentValues arg1) {
     return null;
   }
 
   @Override
-  public Cursor query(Uri arg0, String[] arg1, String arg2, String[] arg3, String arg4) {
+  public Cursor query(@NonNull Uri arg0, String[] arg1, String arg2, String[] arg3, String arg4) {
     return null;
   }
 
   @Override
-  public int update(Uri arg0, ContentValues arg1, String arg2, String[] arg3) {
+  public int update(@NonNull Uri arg0, ContentValues arg1, String arg2, String[] arg3) {
     return 0;
   }
   public static Pointer makeTemporaryPointer(Context context) {

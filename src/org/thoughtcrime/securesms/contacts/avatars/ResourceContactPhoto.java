@@ -5,12 +5,15 @@ import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
-import android.support.annotation.DrawableRes;
-import android.support.v7.content.res.AppCompatResources;
+import androidx.annotation.DrawableRes;
+import androidx.appcompat.content.res.AppCompatResources;
 import android.widget.ImageView;
 
 import com.amulyakhare.textdrawable.TextDrawable;
 import com.makeramen.roundedimageview.RoundedDrawable;
+
+import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.util.ThemeUtil;
 
 public class ResourceContactPhoto implements FallbackContactPhoto {
 
@@ -42,7 +45,10 @@ public class ResourceContactPhoto implements FallbackContactPhoto {
       foreground.setColorFilter(color, PorterDuff.Mode.SRC_ATOP);
     }
 
-    return new ExpandingLayerDrawable(new Drawable[] {background, foreground});
+    Drawable gradient = context.getResources().getDrawable(ThemeUtil.isDarkTheme(context) ? R.drawable.avatar_gradient_dark
+                                                                                          : R.drawable.avatar_gradient_light);
+
+    return new ExpandingLayerDrawable(new Drawable[] {background, foreground, gradient});
   }
 
   @Override

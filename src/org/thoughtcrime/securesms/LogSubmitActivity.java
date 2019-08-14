@@ -3,13 +3,13 @@ package org.thoughtcrime.securesms;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v4.app.FragmentTransaction;
-import android.util.Log;
+import androidx.fragment.app.FragmentTransaction;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.MenuItem;
 import android.widget.Toast;
 
+import org.thoughtcrime.securesms.logsubmit.SubmitLogFragment;
 import org.thoughtcrime.securesms.util.DynamicTheme;
-import org.whispersystems.libpastelog.SubmitLogFragment;
 
 /**
  * Activity for submitting logcat logs to a pastebin service.

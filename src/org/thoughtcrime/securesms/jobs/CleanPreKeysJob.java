@@ -1,17 +1,16 @@
 package org.thoughtcrime.securesms.jobs;
 
-import android.content.Context;
-import android.util.Log;
+import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.crypto.MasterSecret;
+import org.thoughtcrime.securesms.crypto.storage.SignalProtocolStoreImpl;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.logging.Log;
+
 import org.thoughtcrime.securesms.crypto.PreKeyUtil;
-import org.thoughtcrime.securesms.dependencies.InjectableType;
-import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirement;
-import org.whispersystems.jobqueue.JobParameters;
 import org.whispersystems.libsignal.InvalidKeyIdException;
 import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.libsignal.state.SignedPreKeyStore;
-import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 import org.whispersystems.signalservice.api.push.exceptions.NonSuccessfulResponseCodeException;
 import org.whispersystems.signalservice.api.push.exceptions.PushNetworkException;
 
@@ -22,39 +21,42 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import javax.inject.Inject;
+public class CleanPreKeysJob extends BaseJob {
 
-import static org.thoughtcrime.securesms.dependencies.AxolotlStorageModule.SignedPreKeyStoreFactory;
-
-public class CleanPreKeysJob extends MasterSecretJob implements InjectableType {
+  public static final String KEY = "CleanPreKeysJob";
 
   private static final String TAG = CleanPreKeysJob.class.getSimpleName();
 
   private static final long ARCHIVE_AGE = TimeUnit.DAYS.toMillis(7);
 
-  @Inject transient SignalServiceAccountManager accountManager;
-  @Inject transient SignedPreKeyStoreFactory signedPreKeyStoreFactory;
+  public CleanPreKeysJob() {
+    this(new Job.Parameters.Builder()
+                           .setQueue("CleanPreKeysJob")
+                           .setMaxAttempts(5)
+                           .build());
+  }
 
-  public CleanPreKeysJob(Context context) {
-    super(context, JobParameters.newBuilder()
-                                .withGroupId(CleanPreKeysJob.class.getSimpleName())
-                                .withRequirement(new MasterSecretRequirement(context))
-                                .withRetryCount(5)
-                                .create());
+  private CleanPreKeysJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onAdded() {
-
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
   }
 
   @Override
-  public void onRun(MasterSecret masterSecret) throws IOException {
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
+
+  @Override
+  public void onRun() throws IOException {
     try {
-      Log.w(TAG, "Cleaning prekeys...");
+      Log.i(TAG, "Cleaning prekeys...");
 
       int                activeSignedPreKeyId = PreKeyUtil.getActiveSignedPreKeyId(context);
-      SignedPreKeyStore  signedPreKeyStore    = signedPreKeyStoreFactory.create();
+      SignedPreKeyStore  signedPreKeyStore    = new SignalProtocolStoreImpl(context);
 
       if (activeSignedPreKeyId < 0) return;
 
@@ -64,8 +66,8 @@ public class CleanPreKeysJob extends MasterSecretJob implements InjectableType {
 
       Collections.sort(oldRecords, new SignedPreKeySorter());
 
-      Log.w(TAG, "Active signed prekey: " + activeSignedPreKeyId);
-      Log.w(TAG, "Old signed prekey record count: " + oldRecords.size());
+      Log.i(TAG, "Active signed prekey: " + activeSignedPreKeyId);
+      Log.i(TAG, "Old signed prekey record count: " + oldRecords.size());
 
       boolean foundAgedRecord = false;
 
@@ -76,7 +78,7 @@ public class CleanPreKeysJob extends MasterSecretJob implements InjectableType {
           if (!foundAgedRecord) {
             foundAgedRecord = true;
           } else {
-            Log.w(TAG, "Removing signed prekey record: " + oldRecord.getId() + " with timestamp: " + oldRecord.getTimestamp());
+            Log.i(TAG, "Removing signed prekey record: " + oldRecord.getId() + " with timestamp: " + oldRecord.getTimestamp());
             signedPreKeyStore.removeSignedPreKey(oldRecord.getId());
           }
         }
@@ -87,7 +89,7 @@ public class CleanPreKeysJob extends MasterSecretJob implements InjectableType {
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception throwable) {
+  public boolean onShouldRetry(@NonNull Exception throwable) {
     if (throwable instanceof NonSuccessfulResponseCodeException) return false;
     if (throwable instanceof PushNetworkException)               return true;
     return false;
@@ -122,4 +124,10 @@ public class CleanPreKeysJob extends MasterSecretJob implements InjectableType {
     }
   }
 
+  public static final class Factory implements Job.Factory<CleanPreKeysJob> {
+    @Override
+    public @NonNull CleanPreKeysJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new CleanPreKeysJob(parameters);
+    }
+  }
 }

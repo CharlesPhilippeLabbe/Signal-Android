@@ -1,8 +1,8 @@
 package org.thoughtcrime.securesms.components;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -56,7 +56,7 @@ public class RemovableEditableMediaView extends FrameLayout {
     if (current != null) current.setVisibility(View.GONE);
 
     if (view != null) {
-      view.setPadding(0, removeSize / 2, removeSize / 2, 0);
+      view.setPadding(view.getPaddingLeft(), removeSize / 2, removeSize / 2, view.getPaddingRight());
       edit.setPadding(0, 0, removeSize / 2, 0);
 
       view.setVisibility(View.VISIBLE);

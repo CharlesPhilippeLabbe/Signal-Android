@@ -18,10 +18,6 @@
 package org.thoughtcrime.securesms.components.webrtc;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.design.widget.FloatingActionButton;
-import android.support.v4.view.ViewCompat;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -36,16 +32,21 @@ import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
+
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientModifiedListener;
-import org.thoughtcrime.securesms.service.WebRtcCallService;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.VerifySpan;
 import org.thoughtcrime.securesms.util.ViewUtil;
+import org.thoughtcrime.securesms.webrtc.CameraState;
 import org.webrtc.SurfaceViewRenderer;
 import org.whispersystems.libsignal.IdentityKey;
 
@@ -62,6 +63,7 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
   private static final String TAG = WebRtcCallScreen.class.getSimpleName();
 
   private ImageView            photo;
+  private SurfaceViewRenderer  localRenderer;
   private PercentFrameLayout   localRenderLayout;
   private PercentFrameLayout   remoteRenderLayout;
   private TextView             name;
@@ -99,9 +101,9 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
     initialize();
   }
 
-  public void setActiveCall(@NonNull Recipient personInfo, @NonNull String message, @Nullable String sas) {
+  public void setActiveCall(@NonNull Recipient personInfo, @NonNull String message, @Nullable String sas, SurfaceViewRenderer localRenderer, SurfaceViewRenderer remoteRenderer) {
     setCard(personInfo, message);
-    setConnected(WebRtcCallService.localRenderer, WebRtcCallService.remoteRenderer);
+    setConnected(localRenderer, remoteRenderer);
     incomingCallButton.stopRingingAnimation();
     incomingCallButton.setVisibility(View.GONE);
     endCallButton.show();
@@ -116,7 +118,7 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
 
   public void setIncomingCall(Recipient personInfo) {
     setCard(personInfo, getContext().getString(R.string.CallScreen_Incoming_call));
-    endCallButton.setVisibility(View.INVISIBLE);
+    endCallButton.hide();
     incomingCallButton.setVisibility(View.VISIBLE);
     incomingCallButton.startRingingAnimation();
   }
@@ -139,7 +141,7 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
     this.untrustedIdentityExplanation.setText(spannableString);
     this.untrustedIdentityExplanation.setMovementMethod(LinkMovementMethod.getInstance());
 
-    this.endCallButton.setVisibility(View.INVISIBLE);
+    this.endCallButton.hide();
   }
 
   public void setIncomingCallActionListener(WebRtcAnswerDeclineButton.AnswerDeclineListener listener) {
@@ -152,6 +154,10 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
 
   public void setVideoMuteButtonListener(WebRtcCallControls.MuteButtonListener listener) {
     this.controls.setVideoMuteButtonListener(listener);
+  }
+
+  public void setCameraFlipButtonListener(WebRtcCallControls.CameraFlipButtonListener listener) {
+    this.controls.setCameraFlipButtonListener(listener);
   }
 
   public void setSpeakerButtonListener(WebRtcCallControls.SpeakerButtonListener listener) {
@@ -183,15 +189,21 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
     this.controls.setControlsEnabled(enabled);
   }
 
-  public void setLocalVideoEnabled(boolean enabled) {
-    if (enabled && this.localRenderLayout.isHidden()) {
-      this.controls.setVideoEnabled(true);
-      this.localRenderLayout.setHidden(false);
+  public void setLocalVideoState(@NonNull CameraState cameraState) {
+    this.controls.setVideoAvailable(cameraState.getCameraCount() > 0);
+    this.controls.setVideoEnabled(cameraState.isEnabled());
+    this.controls.setCameraFlipAvailable(cameraState.getCameraCount() > 1);
+    this.controls.setCameraFlipClickable(cameraState.getActiveDirection() != CameraState.Direction.PENDING);
+    this.controls.setCameraFlipButtonEnabled(cameraState.getActiveDirection() == CameraState.Direction.BACK);
+
+    if (this.localRenderer != null) {
+      this.localRenderer.setMirror(cameraState.getActiveDirection() == CameraState.Direction.FRONT);
+    }
+
+    if (this.localRenderLayout.isHidden() == cameraState.isEnabled()) {
+      this.localRenderLayout.setHidden(!cameraState.isEnabled());
       this.localRenderLayout.requestLayout();
-    } else  if (!enabled && !this.localRenderLayout.isHidden()){
-      this.controls.setVideoEnabled(false);
-      this.localRenderLayout.setHidden(true);
-      this.localRenderLayout.requestLayout();
+      this.localRenderer.setVisibility(cameraState.isEnabled() ? VISIBLE : INVISIBLE);
     }
   }
 
@@ -242,7 +254,11 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
     this.remoteRenderLayout.setHidden(true);
     this.minimized = false;
 
-    this.remoteRenderLayout.setOnClickListener(v -> setMinimized(!minimized));
+    this.remoteRenderLayout.setOnClickListener(v -> {
+      if (!this.remoteRenderLayout.isHidden()) {
+        setMinimized(!minimized);
+      }
+    });
   }
 
   private void setConnected(SurfaceViewRenderer localRenderer,
@@ -272,6 +288,8 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
 
       localRenderLayout.addView(localRenderer);
       remoteRenderLayout.addView(remoteRenderer);
+
+      this.localRenderer = localRenderer;
     }
   }
 
@@ -282,6 +300,7 @@ public class WebRtcCallScreen extends FrameLayout implements RecipientModifiedLi
     GlideApp.with(getContext().getApplicationContext())
             .load(recipient.getContactPhoto())
             .fallback(recipient.getFallbackContactPhoto().asCallCard(getContext()))
+            .error(recipient.getFallbackContactPhoto().asCallCard(getContext()))
             .diskCacheStrategy(DiskCacheStrategy.ALL)
             .into(this.photo);
 

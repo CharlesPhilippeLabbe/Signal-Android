@@ -22,15 +22,12 @@ import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
-import android.support.annotation.IdRes;
-import android.support.annotation.LayoutRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.view.ViewCompat;
-import android.support.v4.view.animation.FastOutSlowInInterpolator;
-import android.text.TextUtils;
-import android.text.TextUtils.TruncateAt;
-import android.util.DisplayMetrics;
+import androidx.annotation.IdRes;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -95,17 +92,6 @@ public class ViewUtil {
     int childIndex = parent.indexOfChild(toRemove);
     if (childIndex > -1) parent.removeView(toRemove);
     parent.addView(toAdd, childIndex > -1 ? childIndex : defaultIndex);
-  }
-
-  public static CharSequence ellipsize(@Nullable CharSequence text, @NonNull TextView view) {
-    if (TextUtils.isEmpty(text) || view.getWidth() == 0 || view.getEllipsize() != TruncateAt.END) {
-      return text;
-    } else {
-      return TextUtils.ellipsize(text,
-                                 view.getPaint(),
-                                 view.getWidth() - view.getPaddingRight() - view.getPaddingLeft(),
-                                 TruncateAt.END);
-    }
   }
 
   @SuppressWarnings("unchecked")
@@ -210,5 +196,60 @@ public class ViewUtil {
 
   public static int dpToPx(Context context, int dp) {
     return (int)((dp * context.getResources().getDisplayMetrics().density) + 0.5);
+  }
+
+  public static void updateLayoutParams(@NonNull View view, int width, int height) {
+    view.getLayoutParams().width  = width;
+    view.getLayoutParams().height = height;
+    view.requestLayout();
+  }
+
+  public static int getLeftMargin(@NonNull View view) {
+    if (ViewCompat.getLayoutDirection(view) == ViewCompat.LAYOUT_DIRECTION_LTR) {
+      return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).leftMargin;
+    }
+    return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).rightMargin;
+  }
+
+  public static int getRightMargin(@NonNull View view) {
+    if (ViewCompat.getLayoutDirection(view) == ViewCompat.LAYOUT_DIRECTION_LTR) {
+      return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).rightMargin;
+    }
+    return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).leftMargin;
+  }
+
+  public static void setLeftMargin(@NonNull View view, int margin) {
+    if (ViewCompat.getLayoutDirection(view) == ViewCompat.LAYOUT_DIRECTION_LTR) {
+      ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).leftMargin = margin;
+    } else {
+      ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).rightMargin = margin;
+    }
+    view.forceLayout();
+    view.requestLayout();
+  }
+
+  public static void setTopMargin(@NonNull View view, int margin) {
+    ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).topMargin = margin;
+    view.requestLayout();
+  }
+
+  public static void setPaddingTop(@NonNull View view, int padding) {
+    view.setPadding(view.getPaddingLeft(), padding, view.getPaddingRight(), view.getPaddingBottom());
+  }
+
+  public static void setPaddingBottom(@NonNull View view, int padding) {
+    view.setPadding(view.getPaddingLeft(), view.getPaddingTop(), view.getPaddingRight(), padding);
+  }
+
+  public static boolean isPointInsideView(@NonNull View view, float x, float y) {
+    int[] location = new int[2];
+
+    view.getLocationOnScreen(location);
+
+    int viewX = location[0];
+    int viewY = location[1];
+
+    return x > viewX && x < viewX + view.getWidth() &&
+           y > viewY && y < viewY + view.getHeight();
   }
 }

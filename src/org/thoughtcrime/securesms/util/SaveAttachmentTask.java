@@ -4,15 +4,16 @@ import android.content.Context;
 import android.content.DialogInterface.OnClickListener;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.NoExternalStorageException;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.util.task.ProgressDialogAsyncTask;
 import org.whispersystems.libsignal.util.Pair;
@@ -188,7 +189,9 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
                        Toast.LENGTH_LONG).show();
         break;
       case SUCCESS:
-        Toast.makeText(context, String.format("Saved to %s", result.second()), Toast.LENGTH_LONG).show();
+        String message = !TextUtils.isEmpty(result.second())  ? context.getResources().getString(R.string.SaveAttachmentTask_saved_to, result.second())
+                                                              : context.getResources().getString(R.string.SaveAttachmentTask_saved);
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show();
         break;
       case WRITE_ACCESS_FAILURE:
         Toast.makeText(context, R.string.ConversationFragment_unable_to_write_to_sd_card_exclamation,

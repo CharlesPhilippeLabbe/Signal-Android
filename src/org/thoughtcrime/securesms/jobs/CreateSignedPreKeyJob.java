@@ -1,16 +1,16 @@
 package org.thoughtcrime.securesms.jobs;
 
 import android.content.Context;
-import android.util.Log;
+import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
-import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.crypto.PreKeyUtil;
-import org.thoughtcrime.securesms.dependencies.InjectableType;
-import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirement;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
 import org.whispersystems.libsignal.IdentityKeyPair;
 import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
@@ -18,30 +18,36 @@ import org.whispersystems.signalservice.api.push.exceptions.PushNetworkException
 
 import java.io.IOException;
 
-import javax.inject.Inject;
+public class CreateSignedPreKeyJob extends BaseJob {
 
-public class CreateSignedPreKeyJob extends MasterSecretJob implements InjectableType {
-
-  private static final long serialVersionUID = 1L;
+  public static final String KEY = "CreateSignedPreKeyJob";
 
   private static final String TAG = CreateSignedPreKeyJob.class.getSimpleName();
 
-  @Inject transient SignalServiceAccountManager accountManager;
-
   public CreateSignedPreKeyJob(Context context) {
-    super(context, JobParameters.newBuilder()
-                                .withPersistence()
-                                .withRequirement(new NetworkRequirement(context))
-                                .withRequirement(new MasterSecretRequirement(context))
-                                .withGroupId(CreateSignedPreKeyJob.class.getSimpleName())
-                                .create());
+    this(new Job.Parameters.Builder()
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setQueue("CreateSignedPreKeyJob")
+                           .setMaxAttempts(25)
+                           .build());
+  }
+
+  private CreateSignedPreKeyJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onAdded() {}
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
+  }
 
   @Override
-  public void onRun(MasterSecret masterSecret) throws IOException {
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
+
+  @Override
+  public void onRun() throws IOException {
     if (TextSecurePreferences.isSignedPreKeyRegistered(context)) {
       Log.w(TAG, "Signed prekey already registered...");
       return;
@@ -52,8 +58,9 @@ public class CreateSignedPreKeyJob extends MasterSecretJob implements Injectable
       return;
     }
 
-    IdentityKeyPair    identityKeyPair    = IdentityKeyUtil.getIdentityKeyPair(context);
-    SignedPreKeyRecord signedPreKeyRecord = PreKeyUtil.generateSignedPreKey(context, identityKeyPair, true);
+    SignalServiceAccountManager accountManager     = ApplicationDependencies.getSignalServiceAccountManager();
+    IdentityKeyPair             identityKeyPair    = IdentityKeyUtil.getIdentityKeyPair(context);
+    SignedPreKeyRecord          signedPreKeyRecord = PreKeyUtil.generateSignedPreKey(context, identityKeyPair, true);
 
     accountManager.setSignedPreKey(signedPreKeyRecord);
     TextSecurePreferences.setSignedPreKeyRegistered(context, true);
@@ -63,8 +70,15 @@ public class CreateSignedPreKeyJob extends MasterSecretJob implements Injectable
   public void onCanceled() {}
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
+  public boolean onShouldRetry(@NonNull Exception exception) {
     if (exception instanceof PushNetworkException) return true;
     return false;
+  }
+
+  public static final class Factory implements Job.Factory<CreateSignedPreKeyJob> {
+    @Override
+    public @NonNull CreateSignedPreKeyJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new CreateSignedPreKeyJob(parameters);
+    }
   }
 }

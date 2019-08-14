@@ -1,29 +1,33 @@
 package org.thoughtcrime.securesms.giph.ui;
 
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.design.widget.TabLayout;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import com.google.android.material.tabs.TabLayout;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentPagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.View;
 import android.widget.Toast;
 
 import org.thoughtcrime.securesms.PassphraseRequiredActionBarActivity;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
 import org.thoughtcrime.securesms.util.DynamicNoActionBarTheme;
 import org.thoughtcrime.securesms.util.DynamicTheme;
+import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ViewUtil;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
 public class GiphyActivity extends PassphraseRequiredActionBarActivity
@@ -35,6 +39,8 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
   private static final String TAG = GiphyActivity.class.getSimpleName();
 
   public static final String EXTRA_IS_MMS = "extra_is_mms";
+  public static final String EXTRA_WIDTH  = "extra_width";
+  public static final String EXTRA_HEIGHT = "extra_height";
 
   private final DynamicTheme    dynamicTheme    = new DynamicNoActionBarTheme();
   private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
@@ -63,6 +69,7 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
     GiphyActivityToolbar toolbar = ViewUtil.findById(this, R.id.giphy_toolbar);
     toolbar.setOnFilterChangedListener(this);
     toolbar.setOnLayoutChangedListener(this);
+    toolbar.setPersistence(GiphyActivityToolbarTextSecurePreferencesPersistence.fromContext(this));
 
     setSupportActionBar(toolbar);
 
@@ -93,11 +100,12 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
   }
 
   @Override
-  public void onLayoutChanged(int type) {
-    this.gifFragment.setLayoutManager(type);
-    this.stickerFragment.setLayoutManager(type);
+  public void onLayoutChanged(boolean gridLayout) {
+    gifFragment.setLayoutManager(gridLayout);
+    stickerFragment.setLayoutManager(gridLayout);
   }
 
+  @SuppressLint("StaticFieldLeak")
   @Override
   public void onClick(final GiphyAdapter.GiphyViewHolder viewHolder) {
     if (finishingImage != null) finishingImage.gifProgress.setVisibility(View.GONE);
@@ -108,8 +116,13 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
       @Override
       protected Uri doInBackground(Void... params) {
         try {
-          return Uri.fromFile(viewHolder.getFile(forMms));
-        } catch (InterruptedException | ExecutionException e) {
+          byte[] data = viewHolder.getData(forMms);
+
+          return BlobProvider.getInstance()
+                             .forData(data)
+                             .withMimeType(MediaUtil.IMAGE_GIF)
+                             .createForSingleSessionOnDisk(GiphyActivity.this);
+        } catch (InterruptedException | ExecutionException | IOException e) {
           Log.w(TAG, e);
           return null;
         }
@@ -119,7 +132,11 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
         if (uri == null) {
           Toast.makeText(GiphyActivity.this, R.string.GiphyActivity_error_while_retrieving_full_resolution_gif, Toast.LENGTH_LONG).show();
         } else if (viewHolder == finishingImage) {
-          setResult(RESULT_OK, new Intent().setData(uri));
+          Intent intent = new Intent();
+          intent.setData(uri);
+          intent.putExtra(EXTRA_WIDTH, viewHolder.image.getGifWidth());
+          intent.putExtra(EXTRA_HEIGHT, viewHolder.image.getGifHeight());
+          setResult(RESULT_OK, intent);
           finish();
         } else {
           Log.w(TAG, "Resolved Uri is no longer the selected element...");

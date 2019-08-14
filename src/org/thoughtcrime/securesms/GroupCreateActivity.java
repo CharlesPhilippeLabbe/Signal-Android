@@ -23,10 +23,13 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
+
+import org.thoughtcrime.securesms.avatar.AvatarSelection;
+import org.thoughtcrime.securesms.conversation.ConversationActivity;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -40,10 +43,10 @@ import android.widget.Toast;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.target.SimpleTarget;
 import com.bumptech.glide.request.transition.Transition;
-import com.soundcloud.android.crop.Crop;
 
 import org.thoughtcrime.securesms.components.PushRecipientsPanel;
 import org.thoughtcrime.securesms.components.PushRecipientsPanel.RecipientsPanelChangedListener;
+import org.thoughtcrime.securesms.contacts.ContactsCursorLoader.DisplayMode;
 import org.thoughtcrime.securesms.contacts.RecipientsEditor;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
 import org.thoughtcrime.securesms.contacts.avatars.ResourceContactPhoto;
@@ -187,7 +190,7 @@ public class GroupCreateActivity extends PassphraseRequiredActionBarActivity
     recipientsPanel.setPanelChangeListener(this);
     findViewById(R.id.contacts_button).setOnClickListener(new AddRecipientButtonListener());
     avatar.setImageDrawable(new ResourceContactPhoto(R.drawable.ic_group_white_24dp).asDrawable(this, ContactColors.UNKNOWN_COLOR.toConversationColor(this)));
-    avatar.setOnClickListener(view -> Crop.pickImage(GroupCreateActivity.this));
+    avatar.setOnClickListener(view -> AvatarSelection.startAvatarSelection(this, false, false));
   }
 
   private void initializeExistingGroup() {
@@ -290,13 +293,14 @@ public class GroupCreateActivity extends PassphraseRequiredActionBarActivity
         }
         break;
 
-      case Crop.REQUEST_PICK:
-        new Crop(data.getData()).output(outputFile).asSquare().start(this);
+      case AvatarSelection.REQUEST_CODE_AVATAR:
+        AvatarSelection.circularCropImage(this, data.getData(), outputFile, R.string.CropImageActivity_group_avatar);
         break;
-      case Crop.REQUEST_CROP:
+      case AvatarSelection.REQUEST_CODE_CROP_IMAGE:
+        final Uri resultUri = AvatarSelection.getResultUri(data);
         GlideApp.with(this)
                 .asBitmap()
-                .load(Crop.getOutput(data))
+                .load(resultUri)
                 .skipMemoryCache(true)
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .centerCrop()
@@ -304,7 +308,7 @@ public class GroupCreateActivity extends PassphraseRequiredActionBarActivity
                 .into(new SimpleTarget<Bitmap>() {
                   @Override
                   public void onResourceReady(@NonNull Bitmap resource, Transition<? super Bitmap> transition) {
-                    setAvatar(Crop.getOutput(data), resource);
+                    setAvatar(resultUri, resource);
                   }
                 });
     }
@@ -314,8 +318,11 @@ public class GroupCreateActivity extends PassphraseRequiredActionBarActivity
     @Override
     public void onClick(View v) {
       Intent intent = new Intent(GroupCreateActivity.this, PushContactSelectionActivity.class);
-      if (groupToUpdate.isPresent()) intent.putExtra(ContactSelectionListFragment.DISPLAY_MODE,
-                                                     ContactSelectionListFragment.DISPLAY_MODE_PUSH_ONLY);
+      if (groupToUpdate.isPresent()) {
+        intent.putExtra(ContactSelectionListFragment.DISPLAY_MODE, DisplayMode.FLAG_PUSH);
+      } else {
+        intent.putExtra(ContactSelectionListFragment.DISPLAY_MODE, DisplayMode.FLAG_PUSH | DisplayMode.FLAG_SMS);
+      }
       startActivityForResult(intent, PICK_CONTACT);
     }
   }
@@ -336,6 +343,7 @@ public class GroupCreateActivity extends PassphraseRequiredActionBarActivity
       for (Recipient recipient : members) {
         memberAddresses.add(recipient.getAddress());
       }
+      memberAddresses.add(Address.fromSerialized(TextSecurePreferences.getLocalNumber(activity)));
 
       String    groupId        = DatabaseFactory.getGroupDatabase(activity).getOrCreateGroupForMembers(memberAddresses, true);
       Recipient groupRecipient = Recipient.from(activity, Address.fromSerialized(groupId), true);

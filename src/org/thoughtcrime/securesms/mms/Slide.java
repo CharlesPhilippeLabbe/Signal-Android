@@ -19,18 +19,18 @@ package org.thoughtcrime.securesms.mms;
 import android.content.Context;
 import android.content.res.Resources.Theme;
 import android.net.Uri;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.attachments.UriAttachment;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
+import org.thoughtcrime.securesms.stickers.StickerLocator;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
 public abstract class Slide {
@@ -41,7 +41,6 @@ public abstract class Slide {
   public Slide(@NonNull Context context, @NonNull Attachment attachment) {
     this.context    = context;
     this.attachment = attachment;
-
   }
 
   public String getContentType() {
@@ -64,6 +63,11 @@ public abstract class Slide {
   }
 
   @NonNull
+  public Optional<String> getCaption() {
+    return Optional.fromNullable(attachment.getCaption());
+  }
+
+  @NonNull
   public Optional<String> getFileName() {
     return Optional.fromNullable(attachment.getFileName());
   }
@@ -80,6 +84,8 @@ public abstract class Slide {
   public boolean hasImage() {
     return false;
   }
+
+  public boolean hasSticker() { return false; }
 
   public boolean hasVideo() {
     return false;
@@ -99,7 +105,7 @@ public abstract class Slide {
 
   public @NonNull String getContentDescription() { return ""; }
 
-  public Attachment asAttachment() {
+  public @NonNull Attachment asAttachment() {
     return attachment;
   }
 
@@ -112,7 +118,7 @@ public abstract class Slide {
            getTransferState() == AttachmentDatabase.TRANSFER_PROGRESS_PENDING;
   }
 
-  public long getTransferState() {
+  public int getTransferState() {
     return attachment.getTransferState();
   }
 
@@ -128,21 +134,34 @@ public abstract class Slide {
     return false;
   }
 
-  protected static Attachment constructAttachmentFromUri(@NonNull  Context context,
-                                                         @NonNull  Uri     uri,
-                                                         @NonNull  String  defaultMime,
-                                                                   long     size,
-                                                                   boolean  hasThumbnail,
-                                                         @Nullable String   fileName,
-                                                                   boolean  voiceNote)
+  protected static Attachment constructAttachmentFromUri(@NonNull  Context        context,
+                                                         @NonNull  Uri            uri,
+                                                         @NonNull  String         defaultMime,
+                                                                   long           size,
+                                                                   int            width,
+                                                                   int            height,
+                                                                   boolean        hasThumbnail,
+                                                         @Nullable String         fileName,
+                                                         @Nullable String         caption,
+                                                         @Nullable StickerLocator stickerLocator,
+                                                                   boolean        voiceNote,
+                                                                   boolean        quote)
   {
-    try {
-      Optional<String> resolvedType    = Optional.fromNullable(MediaUtil.getMimeType(context, uri));
-      String           fastPreflightId = String.valueOf(SecureRandom.getInstance("SHA1PRNG").nextLong());
-      return new UriAttachment(uri, hasThumbnail ? uri : null, resolvedType.or(defaultMime), AttachmentDatabase.TRANSFER_PROGRESS_STARTED, size, fileName, fastPreflightId, voiceNote);
-    } catch (NoSuchAlgorithmException e) {
-      throw new AssertionError(e);
-    }
+    String                 resolvedType    = Optional.fromNullable(MediaUtil.getMimeType(context, uri)).or(defaultMime);
+    String                 fastPreflightId = String.valueOf(new SecureRandom().nextLong());
+    return new UriAttachment(uri,
+                             hasThumbnail ? uri : null,
+                             resolvedType,
+                             AttachmentDatabase.TRANSFER_PROGRESS_STARTED,
+                             size,
+                             width,
+                             height,
+                             fileName,
+                             fastPreflightId,
+                             voiceNote,
+                             quote,
+                             caption,
+                             stickerLocator);
   }
 
   @Override

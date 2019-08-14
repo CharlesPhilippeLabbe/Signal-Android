@@ -23,7 +23,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.v4.app.RemoteInput;
+import androidx.core.app.RemoteInput;
 
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
@@ -34,6 +34,7 @@ import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.sms.OutgoingTextMessage;
 import org.whispersystems.libsignal.logging.Log;
 
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -71,11 +72,11 @@ public class AndroidAutoReplyReceiver extends BroadcastReceiver {
           long replyThreadId;
 
           int  subscriptionId = recipient.getDefaultSubscriptionId().or(-1);
-          long expiresIn      = recipient.getExpireMessages() * 1000;
+          long expiresIn      = recipient.getExpireMessages() * 1000L;
 
           if (recipient.isGroupRecipient()) {
             Log.w("AndroidAutoReplyReceiver", "GroupRecipient, Sending media message");
-            OutgoingMediaMessage reply = new OutgoingMediaMessage(recipient, responseText.toString(), new LinkedList<>(), System.currentTimeMillis(), subscriptionId, expiresIn, 0);
+            OutgoingMediaMessage reply = new OutgoingMediaMessage(recipient, responseText.toString(), new LinkedList<>(), System.currentTimeMillis(), subscriptionId, expiresIn, false, 0, null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             replyThreadId = MessageSender.send(context, reply, threadId, false, null);
           } else {
             Log.w("AndroidAutoReplyReceiver", "Sending regular message ");

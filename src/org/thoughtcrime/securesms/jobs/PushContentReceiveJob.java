@@ -1,57 +1,49 @@
 package org.thoughtcrime.securesms.jobs;
 
 import android.content.Context;
-import android.util.Log;
+import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.libsignal.InvalidVersionException;
-import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
-
-import java.io.IOException;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
 
 public class PushContentReceiveJob extends PushReceivedJob {
 
-  private static final String TAG = PushContentReceiveJob.class.getSimpleName();
-
-  private final String data;
+  public static final String KEY = "PushContentReceiveJob";
 
   public PushContentReceiveJob(Context context) {
-    super(context, JobParameters.newBuilder().create());
-    this.data = null;
+    this(new Job.Parameters.Builder().build());
+    setContext(context);
   }
 
-  public PushContentReceiveJob(Context context, String data) {
-    super(context, JobParameters.newBuilder()
-                                .withPersistence()
-                                .withWakeLock(true)
-                                .create());
-
-    this.data = data;
+  private PushContentReceiveJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onAdded() {}
-
-  @Override
-  public void onRun() {
-    try {
-      String                sessionKey = TextSecurePreferences.getSignalingKey(context);
-      SignalServiceEnvelope envelope   = new SignalServiceEnvelope(data, sessionKey);
-
-      handle(envelope);
-    } catch (IOException | InvalidVersionException e) {
-      Log.w(TAG, e);
-    }
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
   }
 
   @Override
-  public void onCanceled() {
-
+  public @NonNull String getFactoryKey() {
+    return KEY;
   }
 
   @Override
-  public boolean onShouldRetry(Exception exception) {
+  public void onRun() { }
+
+  @Override
+  public void onCanceled() { }
+
+  @Override
+  public boolean onShouldRetry(@NonNull Exception exception) {
     return false;
+  }
+
+  public static final class Factory implements Job.Factory<PushContentReceiveJob> {
+    @Override
+    public @NonNull PushContentReceiveJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new PushContentReceiveJob(parameters);
+    }
   }
 }

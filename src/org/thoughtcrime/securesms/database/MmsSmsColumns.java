@@ -19,6 +19,7 @@ public interface MmsSmsColumns {
   public static final String EXPIRES_IN               = "expires_in";
   public static final String EXPIRE_STARTED           = "expire_started";
   public static final String NOTIFIED                 = "notified";
+  public static final String UNIDENTIFIED             = "unidentified";
 
   public static class Types {
     protected static final long TOTAL_MASK = 0xFFFFFFFF;
@@ -30,6 +31,8 @@ public interface MmsSmsColumns {
     protected static final long OUTGOING_CALL_TYPE                 = 2;
     protected static final long MISSED_CALL_TYPE                   = 3;
     protected static final long JOINED_TYPE                        = 4;
+    protected static final long UNSUPPORTED_MESSAGE_TYPE           = 5;
+    protected static final long INVALID_MESSAGE_TYPE               = 6;
 
     protected static final long BASE_INBOX_TYPE                    = 20;
     protected static final long BASE_OUTBOX_TYPE                   = 21;
@@ -116,6 +119,10 @@ public interface MmsSmsColumns {
           (type & BASE_TYPE_MASK) == BASE_SENDING_TYPE;
     }
 
+    public static boolean isSentType(long type) {
+      return (type & BASE_TYPE_MASK) == BASE_SENT_TYPE;
+    }
+
     public static boolean isPendingSmsFallbackType(long type) {
       return (type & BASE_TYPE_MASK) == BASE_PENDING_INSECURE_SMS_FALLBACK ||
              (type & BASE_TYPE_MASK) == BASE_PENDING_SECURE_SMS_FALLBACK;
@@ -135,6 +142,14 @@ public interface MmsSmsColumns {
 
     public static boolean isJoinedType(long type) {
       return (type & BASE_TYPE_MASK) == JOINED_TYPE;
+    }
+
+    public static boolean isUnsupportedMessageType(long type) {
+      return (type & BASE_TYPE_MASK) == UNSUPPORTED_MESSAGE_TYPE;
+    }
+
+    public static boolean isInvalidMessageType(long type) {
+      return (type & BASE_TYPE_MASK) == INVALID_MESSAGE_TYPE;
     }
 
     public static boolean isSecureType(long type) {

@@ -4,10 +4,10 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.util.AttributeSet;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 import android.util.Pair;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -35,7 +35,7 @@ import java.io.InputStream;
 
 public class ZoomingImageView extends FrameLayout {
 
-  private static final String TAG = ZoomingImageView.class.getName();
+  private static final String TAG = ZoomingImageView.class.getSimpleName();
 
   private final PhotoView                 photoView;
   private final SubsamplingScaleImageView subsamplingImageView;
@@ -57,6 +57,9 @@ public class ZoomingImageView extends FrameLayout {
     this.subsamplingImageView = findViewById(R.id.subsampling_image_view);
 
     this.subsamplingImageView.setOrientation(SubsamplingScaleImageView.ORIENTATION_USE_EXIF);
+
+    this.photoView.setOnClickListener(v -> ZoomingImageView.this.callOnClick());
+    this.subsamplingImageView.setOnClickListener(v -> ZoomingImageView.this.callOnClick());
   }
 
   @SuppressLint("StaticFieldLeak")
@@ -65,7 +68,7 @@ public class ZoomingImageView extends FrameLayout {
     final Context context        = getContext();
     final int     maxTextureSize = BitmapUtil.getMaxTextureSize();
 
-    Log.w(TAG, "Max texture size: " + maxTextureSize);
+    Log.i(TAG, "Max texture size: " + maxTextureSize);
 
     new AsyncTask<Void, Void, Pair<Integer, Integer>>() {
       @Override
@@ -82,13 +85,13 @@ public class ZoomingImageView extends FrameLayout {
       }
 
       protected void onPostExecute(@Nullable Pair<Integer, Integer> dimensions) {
-        Log.w(TAG, "Dimensions: " + (dimensions == null ? "(null)" : dimensions.first + ", " + dimensions.second));
+        Log.i(TAG, "Dimensions: " + (dimensions == null ? "(null)" : dimensions.first + ", " + dimensions.second));
 
         if (dimensions == null || (dimensions.first <= maxTextureSize && dimensions.second <= maxTextureSize)) {
-          Log.w(TAG, "Loading in standard image view...");
+          Log.i(TAG, "Loading in standard image view...");
           setImageViewUri(glideRequests, uri);
         } else {
-          Log.w(TAG, "Loading in subsampling image view...");
+          Log.i(TAG, "Loading in subsampling image view...");
           setSubsamplingImageViewUri(uri);
         }
       }

@@ -2,15 +2,11 @@ package org.thoughtcrime.securesms;
 
 import android.animation.Animator;
 import android.annotation.TargetApi;
-import android.content.Context;
 import android.content.res.Configuration;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewAnimationUtils;
@@ -19,21 +15,9 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
-import com.google.zxing.BinaryBitmap;
-import com.google.zxing.ChecksumException;
-import com.google.zxing.FormatException;
-import com.google.zxing.NotFoundException;
-import com.google.zxing.PlanarYUVLuminanceSource;
-import com.google.zxing.Result;
-import com.google.zxing.common.HybridBinarizer;
-import com.google.zxing.qrcode.QRCodeReader;
-
 import org.thoughtcrime.securesms.components.camera.CameraView;
-import org.thoughtcrime.securesms.components.camera.CameraView.PreviewCallback;
-import org.thoughtcrime.securesms.components.camera.CameraView.PreviewFrame;
 import org.thoughtcrime.securesms.qr.ScanListener;
 import org.thoughtcrime.securesms.qr.ScanningThread;
-import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
 
 public class DeviceAddFragment extends Fragment {
@@ -46,7 +30,7 @@ public class DeviceAddFragment extends Fragment {
   private ScanListener   scanListener;
 
   @Override
-  public View onCreateView(LayoutInflater inflater, ViewGroup viewGroup, Bundle bundle) {
+  public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup viewGroup, Bundle bundle) {
     this.container    = ViewUtil.inflate(inflater, viewGroup, R.layout.device_add_fragment);
     this.overlay      = ViewUtil.findById(this.container, R.id.overlay);
     this.scannerView  = ViewUtil.findById(this.container, R.id.scanner);

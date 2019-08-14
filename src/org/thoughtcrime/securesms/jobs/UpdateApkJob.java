@@ -8,9 +8,13 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
-import android.support.annotation.Nullable;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -20,39 +24,48 @@ import org.thoughtcrime.securesms.util.FileUtils;
 import org.thoughtcrime.securesms.util.Hex;
 import org.thoughtcrime.securesms.util.JsonUtils;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
-import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class UpdateApkJob extends ContextJob {
+public class UpdateApkJob extends BaseJob {
+
+  public static final String KEY = "UpdateApkJob";
 
   private static final String TAG = UpdateApkJob.class.getSimpleName();
 
-  public UpdateApkJob(Context context) {
-    super(context, JobParameters.newBuilder()
-                                .withGroupId(UpdateApkJob.class.getSimpleName())
-                                .withRequirement(new NetworkRequirement(context))
-                                .withWakeLock(true, 30, TimeUnit.SECONDS)
-                                .withRetryCount(2)
-                                .create());
+  public UpdateApkJob() {
+    this(new Job.Parameters.Builder()
+                           .setQueue("UpdateApkJob")
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setMaxAttempts(2)
+                           .build());
+  }
+
+  private UpdateApkJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onAdded() {}
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
+  }
+
+  @Override
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
 
   @Override
   public void onRun() throws IOException, PackageManager.NameNotFoundException {
     if (!BuildConfig.PLAY_STORE_DISABLED) return;
 
-    Log.w(TAG, "Checking for APK update...");
+    Log.i(TAG, "Checking for APK update...");
 
     OkHttpClient client  = new OkHttpClient();
     Request      request = new Request.Builder().url(String.format("%s/latest.json", BuildConfig.NOPLAY_UPDATE_URL)).build();
@@ -66,25 +79,25 @@ public class UpdateApkJob extends ContextJob {
     UpdateDescriptor updateDescriptor = JsonUtils.fromJson(response.body().string(), UpdateDescriptor.class);
     byte[]           digest           = Hex.fromStringCondensed(updateDescriptor.getDigest());
 
-    Log.w(TAG, "Got descriptor: " + updateDescriptor);
+    Log.i(TAG, "Got descriptor: " + updateDescriptor);
 
     if (updateDescriptor.getVersionCode() > getVersionCode()) {
       DownloadStatus downloadStatus = getDownloadStatus(updateDescriptor.getUrl(), digest);
 
-      Log.w(TAG, "Download status: "  + downloadStatus.getStatus());
+      Log.i(TAG, "Download status: "  + downloadStatus.getStatus());
 
       if (downloadStatus.getStatus() == DownloadStatus.Status.COMPLETE) {
-        Log.w(TAG, "Download status complete, notifying...");
+        Log.i(TAG, "Download status complete, notifying...");
         handleDownloadNotify(downloadStatus.getDownloadId());
       } else if (downloadStatus.getStatus() == DownloadStatus.Status.MISSING) {
-        Log.w(TAG, "Download status missing, starting download...");
+        Log.i(TAG, "Download status missing, starting download...");
         handleDownloadStart(updateDescriptor.getUrl(), updateDescriptor.getVersionName(), digest);
       }
     }
   }
 
   @Override
-  public boolean onShouldRetry(Exception e) {
+  public boolean onShouldRetry(@NonNull Exception e) {
     return e instanceof  IOException;
   }
 
@@ -148,10 +161,7 @@ public class UpdateApkJob extends ContextJob {
     downloadRequest.setDescription("Downloading Signal " + versionName);
     downloadRequest.setVisibleInDownloadsUi(false);
     downloadRequest.setDestinationInExternalFilesDir(context, null, "signal-update.apk");
-
-    if (Build.VERSION.SDK_INT >= 11) {
-      downloadRequest.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN);
-    }
+    downloadRequest.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN);
 
     long downloadId = downloadManager.enqueue(downloadRequest);
     TextSecurePreferences.setUpdateApkDownloadId(context, downloadId);
@@ -219,7 +229,7 @@ public class UpdateApkJob extends ContextJob {
       return url;
     }
 
-    public String toString() {
+    public @NonNull String toString() {
       return "["  + versionCode + ", " + versionName + ", " + url + "]";
     }
 
@@ -249,6 +259,13 @@ public class UpdateApkJob extends ContextJob {
 
     public long getDownloadId() {
       return downloadId;
+    }
+  }
+
+  public static final class Factory implements Job.Factory<UpdateApkJob> {
+    @Override
+    public @NonNull UpdateApkJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new UpdateApkJob(parameters);
     }
   }
 }

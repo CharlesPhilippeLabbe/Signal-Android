@@ -1,23 +1,24 @@
 package org.thoughtcrime.securesms;
 
 import android.annotation.TargetApi;
-import android.app.ActivityOptions;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.app.ActivityOptionsCompat;
-import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.ActivityOptionsCompat;
+import androidx.appcompat.app.AppCompatActivity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
-import android.view.animation.AnimationUtils;
 
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.dynamiclanguage.DynamicLanguageActivityHelper;
+import org.thoughtcrime.securesms.util.dynamiclanguage.DynamicLanguageContextWrapper;
 
 import java.lang.reflect.Field;
 
@@ -37,6 +38,7 @@ public abstract class BaseActionBarActivity extends AppCompatActivity {
   protected void onResume() {
     super.onResume();
     initializeScreenshotSecurity();
+    DynamicLanguageActivityHelper.recreateIfNotInCorrectLanguage(this, TextSecurePreferences.getLanguage(this));
   }
 
   @Override
@@ -54,9 +56,7 @@ public abstract class BaseActionBarActivity extends AppCompatActivity {
   }
 
   private void initializeScreenshotSecurity() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH &&
-            TextSecurePreferences.isScreenSecurityEnabled(this))
-    {
+    if (TextSecurePreferences.isScreenSecurityEnabled(this)) {
       getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
     } else {
       getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -94,4 +94,8 @@ public abstract class BaseActionBarActivity extends AppCompatActivity {
     }
   }
 
+  @Override
+  protected void attachBaseContext(Context newBase) {
+    super.attachBaseContext(DynamicLanguageContextWrapper.updateContext(newBase, TextSecurePreferences.getLanguage(newBase)));
+  }
 }

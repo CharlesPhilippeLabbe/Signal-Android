@@ -4,13 +4,13 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
-import org.thoughtcrime.securesms.ConversationActivity;
-import org.thoughtcrime.securesms.ConversationPopupActivity;
+import org.thoughtcrime.securesms.conversation.ConversationActivity;
+import org.thoughtcrime.securesms.conversation.ConversationPopupActivity;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 
 import java.util.LinkedHashSet;
@@ -18,6 +18,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class NotificationState {
+
+  private static final String TAG = NotificationState.class.getSimpleName();
 
   private final LinkedList<NotificationItem> notifications = new LinkedList<>();
   private final LinkedHashSet<Long>          threads       = new LinkedHashSet<>();
@@ -43,12 +45,13 @@ public class NotificationState {
     notificationCount++;
   }
 
-  public @Nullable Uri getRingtone() {
+  public @Nullable Uri getRingtone(@NonNull Context context) {
     if (!notifications.isEmpty()) {
       Recipient recipient = notifications.getFirst().getRecipient();
 
       if (recipient != null) {
-        return recipient.getRingtone();
+        return NotificationChannels.supported() ? NotificationChannels.getMessageRingtone(context, recipient)
+                                                : recipient.resolve().getMessageRingtone();
       }
     }
 
@@ -60,7 +63,7 @@ public class NotificationState {
       Recipient recipient = notifications.getFirst().getRecipient();
 
       if (recipient != null) {
-        return recipient.getVibrate();
+        return recipient.resolve().getMessageVibrate();
       }
     }
 
@@ -102,7 +105,7 @@ public class NotificationState {
     int    index       = 0;
 
     for (long thread : threads) {
-      Log.w("NotificationState", "Added thread: " + thread);
+      Log.i(TAG, "Added thread: " + thread);
       threadArray[index++] = thread;
     }
 
@@ -115,13 +118,14 @@ public class NotificationState {
     return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
   }
 
-  public PendingIntent getRemoteReplyIntent(Context context, Recipient recipient) {
+  public PendingIntent getRemoteReplyIntent(Context context, Recipient recipient, ReplyMethod replyMethod) {
     if (threads.size() != 1) throw new AssertionError("We only support replies to single thread notifications!");
 
     Intent intent = new Intent(RemoteReplyReceiver.REPLY_ACTION);
     intent.setClass(context, RemoteReplyReceiver.class);
     intent.setData((Uri.parse("custom://"+System.currentTimeMillis())));
     intent.putExtra(RemoteReplyReceiver.ADDRESS_EXTRA, recipient.getAddress());
+    intent.putExtra(RemoteReplyReceiver.REPLY_METHOD, replyMethod);
     intent.setPackage(context.getPackageName());
 
     return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
@@ -145,7 +149,7 @@ public class NotificationState {
     long[] threadArray = new long[threads.size()];
     int    index       = 0;
     for (long thread : threads) {
-      Log.w("NotificationState", "getAndroidAutoHeardIntent Added thread: " + thread);
+      Log.i(TAG, "getAndroidAutoHeardIntent Added thread: " + thread);
       threadArray[index++] = thread;
     }
 

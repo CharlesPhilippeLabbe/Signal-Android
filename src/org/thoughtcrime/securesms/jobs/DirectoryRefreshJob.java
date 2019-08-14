@@ -1,68 +1,104 @@
 package org.thoughtcrime.securesms.jobs;
 
-import android.content.Context;
-import android.os.PowerManager;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.util.Log;
+import android.app.Application;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.DirectoryHelper;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
 import org.whispersystems.signalservice.api.push.exceptions.PushNetworkException;
 
 import java.io.IOException;
 
-public class DirectoryRefreshJob extends ContextJob {
+public class DirectoryRefreshJob extends BaseJob {
 
-  @Nullable private transient Recipient    recipient;
-            private transient boolean      notifyOfNewUsers;
+  public static final String KEY = "DirectoryRefreshJob";
 
-  public DirectoryRefreshJob(@NonNull Context context, boolean notifyOfNewUsers) {
-    this(context, null, notifyOfNewUsers);
+  private static final String TAG = DirectoryRefreshJob.class.getSimpleName();
+
+  private static final String KEY_ADDRESS             = "address";
+  private static final String KEY_NOTIFY_OF_NEW_USERS = "notify_of_new_users";
+
+  @Nullable private Recipient recipient;
+            private boolean   notifyOfNewUsers;
+
+  public DirectoryRefreshJob(boolean notifyOfNewUsers) {
+    this(null, notifyOfNewUsers);
   }
 
-  public DirectoryRefreshJob(@NonNull Context context,
-                             @Nullable Recipient recipient,
-                                       boolean notifyOfNewUsers)
+  public DirectoryRefreshJob(@Nullable Recipient recipient,
+                             boolean notifyOfNewUsers)
   {
-    super(context, JobParameters.newBuilder()
-                                .withGroupId(DirectoryRefreshJob.class.getSimpleName())
-                                .withRequirement(new NetworkRequirement(context))
-                                .create());
+    this(new Job.Parameters.Builder()
+                           .setQueue("DirectoryRefreshJob")
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setMaxAttempts(10)
+                           .build(),
+         recipient,
+         notifyOfNewUsers);
+  }
+
+  private DirectoryRefreshJob(@NonNull Job.Parameters parameters, @Nullable Recipient recipient, boolean notifyOfNewUsers) {
+    super(parameters);
 
     this.recipient        = recipient;
     this.notifyOfNewUsers = notifyOfNewUsers;
   }
 
   @Override
-  public void onAdded() {}
+  public @NonNull Data serialize() {
+    return new Data.Builder().putString(KEY_ADDRESS, recipient != null ? recipient.getAddress().serialize() : null)
+                             .putBoolean(KEY_NOTIFY_OF_NEW_USERS, notifyOfNewUsers)
+                             .build();
+  }
+
+  @Override
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
 
   @Override
   public void onRun() throws IOException {
-    Log.w("DirectoryRefreshJob", "DirectoryRefreshJob.onRun()");
-    PowerManager          powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-    PowerManager.WakeLock wakeLock     = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Directory Refresh");
+    Log.i(TAG, "DirectoryRefreshJob.onRun()");
 
-    try {
-      wakeLock.acquire();
-      if (recipient == null) {
-        DirectoryHelper.refreshDirectory(context, notifyOfNewUsers);
-      } else {
-        DirectoryHelper.refreshDirectoryFor(context, recipient);
-      }
-    } finally {
-      if (wakeLock.isHeld()) wakeLock.release();
+    if (recipient == null) {
+      DirectoryHelper.refreshDirectory(context, notifyOfNewUsers);
+    } else {
+      DirectoryHelper.refreshDirectoryFor(context, recipient);
     }
   }
 
   @Override
-  public boolean onShouldRetry(Exception exception) {
+  public boolean onShouldRetry(@NonNull Exception exception) {
     if (exception instanceof PushNetworkException) return true;
     return false;
   }
 
   @Override
   public void onCanceled() {}
+
+  public static final class Factory implements Job.Factory<DirectoryRefreshJob> {
+
+    private final Application application;
+
+    public Factory(@NonNull Application application) {
+      this.application = application;
+    }
+
+    @Override
+    public @NonNull DirectoryRefreshJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      String    serializedAddress = data.getString(KEY_ADDRESS);
+      Address   address           = serializedAddress != null ? Address.fromSerialized(serializedAddress) : null;
+      Recipient recipient         = address != null ? Recipient.from(application, address, true) : null;
+      boolean   notifyOfNewUsers  = data.getBoolean(KEY_NOTIFY_OF_NEW_USERS);
+
+      return new DirectoryRefreshJob(parameters, recipient, notifyOfNewUsers);
+    }
+  }
 }

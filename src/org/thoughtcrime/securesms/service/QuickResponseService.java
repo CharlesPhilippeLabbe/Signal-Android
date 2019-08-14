@@ -4,11 +4,11 @@ import android.app.IntentService;
 import android.content.Intent;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
-import android.util.Log;
 import android.widget.Toast;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.sms.OutgoingTextMessage;
@@ -50,7 +50,7 @@ public class QuickResponseService extends IntentService {
       Address   address        = Address.fromExternal(this, number);
       Recipient recipient      = Recipient.from(this, address, false);
       int       subscriptionId = recipient.getDefaultSubscriptionId().or(-1);
-      long      expiresIn      = recipient.getExpireMessages() * 1000;
+      long      expiresIn      = recipient.getExpireMessages() * 1000L;
 
       if (!TextUtils.isEmpty(content)) {
         MessageSender.send(this, new OutgoingTextMessage(recipient, content, expiresIn, subscriptionId), -1, false, null);

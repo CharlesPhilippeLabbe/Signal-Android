@@ -2,7 +2,7 @@ package org.thoughtcrime.securesms.mms;
 
 import android.content.Context;
 import android.net.Uri;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.components.location.SignalPlace;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -14,7 +14,7 @@ public class LocationSlide extends ImageSlide {
 
   public LocationSlide(@NonNull  Context context, @NonNull  Uri uri, long size, @NonNull SignalPlace place)
   {
-    super(context, uri, size);
+    super(context, uri, size, 0, 0);
     this.place = place;
   }
 

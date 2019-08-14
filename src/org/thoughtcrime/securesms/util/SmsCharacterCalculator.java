@@ -17,7 +17,7 @@
 package org.thoughtcrime.securesms.util;
 
 import android.telephony.SmsMessage;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 
 public class SmsCharacterCalculator extends CharacterCalculator {
 
@@ -50,7 +50,7 @@ public class SmsCharacterCalculator extends CharacterCalculator {
       maxMessageSize = (charactersSpent + charactersRemaining);
     }
     
-    return new CharacterState(messagesSpent, charactersRemaining, maxMessageSize);
+    return new CharacterState(messagesSpent, charactersRemaining, maxMessageSize, maxMessageSize);
   }
 }
 

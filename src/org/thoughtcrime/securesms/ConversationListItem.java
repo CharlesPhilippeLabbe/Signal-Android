@@ -18,37 +18,39 @@ package org.thoughtcrime.securesms;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
-import android.support.annotation.NonNull;
+import android.text.style.StyleSpan;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import com.amulyakhare.textdrawable.TextDrawable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.components.AlertView;
 import org.thoughtcrime.securesms.components.AvatarImageView;
 import org.thoughtcrime.securesms.components.DeliveryStatusView;
 import org.thoughtcrime.securesms.components.FromTextView;
 import org.thoughtcrime.securesms.components.ThumbnailView;
+import org.thoughtcrime.securesms.components.TypingIndicatorView;
 import org.thoughtcrime.securesms.database.model.ThreadRecord;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientModifiedListener;
+import org.thoughtcrime.securesms.search.model.MessageResult;
 import org.thoughtcrime.securesms.util.DateUtils;
+import org.thoughtcrime.securesms.util.SearchUtil;
+import org.thoughtcrime.securesms.util.ThemeUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
 
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
-
-import static org.thoughtcrime.securesms.util.SpanUtil.color;
 
 public class ConversationListItem extends RelativeLayout
                                   implements RecipientModifiedListener,
@@ -57,21 +59,25 @@ public class ConversationListItem extends RelativeLayout
   @SuppressWarnings("unused")
   private final static String TAG = ConversationListItem.class.getSimpleName();
 
-  private final static Typeface BOLD_TYPEFACE  = Typeface.create("sans-serif", Typeface.BOLD);
-  private final static Typeface LIGHT_TYPEFACE = Typeface.create("sans-serif-light", Typeface.NORMAL);
+  private final static Typeface  BOLD_TYPEFACE  = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+  private final static Typeface  LIGHT_TYPEFACE = Typeface.create("sans-serif", Typeface.NORMAL);
 
-  private Set<Long>          selectedThreads;
-  private Recipient          recipient;
-  private long               threadId;
-  private GlideRequests      glideRequests;
-  private TextView           subjectView;
-  private FromTextView       fromView;
-  private TextView           dateView;
-  private TextView           archivedView;
-  private DeliveryStatusView deliveryStatusIndicator;
-  private AlertView          alertView;
-  private ImageView          unreadIndicator;
-  private long               lastSeen;
+  private static final int MAX_SNIPPET_LENGTH = 500;
+
+  private Set<Long>           selectedThreads;
+  private Recipient           recipient;
+  private long                threadId;
+  private GlideRequests       glideRequests;
+  private View                subjectContainer;
+  private TextView            subjectView;
+  private TypingIndicatorView typingView;
+  private FromTextView        fromView;
+  private TextView            dateView;
+  private TextView            archivedView;
+  private DeliveryStatusView  deliveryStatusIndicator;
+  private AlertView           alertView;
+  private TextView            unreadIndicator;
+  private long                lastSeen;
 
   private int             unreadCount;
   private AvatarImageView contactPhotoImage;
@@ -90,7 +96,9 @@ public class ConversationListItem extends RelativeLayout
   @Override
   protected void onFinishInflate() {
     super.onFinishInflate();
+    this.subjectContainer        = findViewById(R.id.subject_container);
     this.subjectView             = findViewById(R.id.subject);
+    this.typingView              = findViewById(R.id.typing_indicator);
     this.fromView                = findViewById(R.id.from);
     this.dateView                = findViewById(R.id.date);
     this.deliveryStatusIndicator = findViewById(R.id.delivery_status);
@@ -107,8 +115,22 @@ public class ConversationListItem extends RelativeLayout
 
   @Override
   public void bind(@NonNull ThreadRecord thread,
-                   @NonNull GlideRequests glideRequests, @NonNull Locale locale,
-                   @NonNull Set<Long> selectedThreads, boolean batchMode)
+                   @NonNull GlideRequests glideRequests,
+                   @NonNull Locale locale,
+                   @NonNull Set<Long> typingThreads,
+                   @NonNull Set<Long> selectedThreads,
+                   boolean batchMode)
+  {
+    bind(thread, glideRequests, locale, typingThreads, selectedThreads, batchMode, null);
+  }
+
+  public void bind(@NonNull ThreadRecord thread,
+                   @NonNull GlideRequests glideRequests,
+                   @NonNull Locale locale,
+                   @NonNull Set<Long> typingThreads,
+                   @NonNull Set<Long> selectedThreads,
+                   boolean batchMode,
+                   @Nullable String highlightSubstring)
   {
     this.selectedThreads  = selectedThreads;
     this.recipient        = thread.getRecipient();
@@ -119,15 +141,36 @@ public class ConversationListItem extends RelativeLayout
     this.lastSeen         = thread.getLastSeen();
 
     this.recipient.addListener(this);
-    this.fromView.setText(recipient, unreadCount == 0);
+    if (highlightSubstring != null) {
+      String name = recipient.isLocalNumber() ? getContext().getString(R.string.note_to_self) : recipient.getName();
 
-    this.subjectView.setText(thread.getDisplayBody());
-//    this.subjectView.setTypeface(read ? LIGHT_TYPEFACE : BOLD_TYPEFACE);
+      this.fromView.setText(SearchUtil.getHighlightedSpan(locale, () -> new StyleSpan(Typeface.BOLD), name, highlightSubstring));
+    } else {
+      this.fromView.setText(recipient, unreadCount == 0);
+    }
+
+    if (typingThreads.contains(threadId)) {
+      this.subjectView.setVisibility(INVISIBLE);
+
+      this.typingView.setVisibility(VISIBLE);
+      this.typingView.startAnimation();
+    } else {
+      this.typingView.setVisibility(GONE);
+      this.typingView.stopAnimation();
+
+      this.subjectView.setVisibility(VISIBLE);
+      this.subjectView.setText(getTrimmedSnippet(thread.getDisplayBody(getContext())));
+      this.subjectView.setTypeface(unreadCount == 0 ? LIGHT_TYPEFACE : BOLD_TYPEFACE);
+      this.subjectView.setTextColor(unreadCount == 0 ? ThemeUtil.getThemedColor(getContext(), R.attr.conversation_list_item_subject_color)
+                                                     : ThemeUtil.getThemedColor(getContext(), R.attr.conversation_list_item_unread_color));
+    }
 
     if (thread.getDate() > 0) {
       CharSequence date = DateUtils.getBriefRelativeTimeSpanString(getContext(), locale, thread.getDate());
-      dateView.setText(unreadCount == 0 ? date : color(getResources().getColor(R.color.textsecure_primary_dark), date));
+      dateView.setText(date);
       dateView.setTypeface(unreadCount == 0 ? LIGHT_TYPEFACE : BOLD_TYPEFACE);
+      dateView.setTextColor(unreadCount == 0 ? ThemeUtil.getThemedColor(getContext(), R.attr.conversation_list_item_date_color)
+                                             : ThemeUtil.getThemedColor(getContext(), R.attr.conversation_list_item_unread_color));
     }
 
     if (thread.isArchived()) {
@@ -144,9 +187,65 @@ public class ConversationListItem extends RelativeLayout
     this.contactPhotoImage.setAvatar(glideRequests, recipient, true);
   }
 
+  public void bind(@NonNull  Recipient     contact,
+                   @NonNull  GlideRequests glideRequests,
+                   @NonNull  Locale        locale,
+                   @Nullable String        highlightSubstring)
+  {
+    this.selectedThreads = Collections.emptySet();
+    this.recipient       = contact;
+    this.glideRequests   = glideRequests;
+
+    this.recipient.addListener(this);
+
+    String name = recipient.isLocalNumber() ? getContext().getString(R.string.note_to_self) : recipient.getName();
+
+    fromView.setText(SearchUtil.getHighlightedSpan(locale, () -> new StyleSpan(Typeface.BOLD), name, highlightSubstring));
+    subjectView.setText(SearchUtil.getHighlightedSpan(locale, () -> new StyleSpan(Typeface.BOLD), contact.getAddress().toString(), highlightSubstring));
+    dateView.setText("");
+    archivedView.setVisibility(GONE);
+    unreadIndicator.setVisibility(GONE);
+    deliveryStatusIndicator.setNone();
+    alertView.setNone();
+    thumbnailView.setVisibility(GONE);
+
+    setBatchState(false);
+    setRippleColor(contact);
+    contactPhotoImage.setAvatar(glideRequests, recipient, true);
+  }
+
+  public void bind(@NonNull  MessageResult messageResult,
+                   @NonNull  GlideRequests glideRequests,
+                   @NonNull  Locale        locale,
+                   @Nullable String        highlightSubstring)
+  {
+    this.selectedThreads = Collections.emptySet();
+    this.recipient       = messageResult.conversationRecipient;
+    this.glideRequests   = glideRequests;
+
+    this.recipient.addListener(this);
+
+    fromView.setText(recipient, true);
+    subjectView.setText(SearchUtil.getHighlightedSpan(locale, () -> new StyleSpan(Typeface.BOLD), messageResult.bodySnippet, highlightSubstring));
+    dateView.setText(DateUtils.getBriefRelativeTimeSpanString(getContext(), locale, messageResult.receivedTimestampMs));
+    archivedView.setVisibility(GONE);
+    unreadIndicator.setVisibility(GONE);
+    deliveryStatusIndicator.setNone();
+    alertView.setNone();
+    thumbnailView.setVisibility(GONE);
+
+    setBatchState(false);
+    setRippleColor(recipient);
+    contactPhotoImage.setAvatar(glideRequests, recipient, true);
+  }
+
   @Override
   public void unbind() {
-    if (this.recipient != null) this.recipient.removeListener(this);
+    if (this.recipient != null) {
+      this.recipient.removeListener(this);
+      this.recipient = null;
+      contactPhotoImage.setAvatar(glideRequests, null, true);
+    }
   }
 
   private void setBatchState(boolean batch) {
@@ -173,27 +272,32 @@ public class ConversationListItem extends RelativeLayout
     return lastSeen;
   }
 
+  private @NonNull CharSequence getTrimmedSnippet(@NonNull CharSequence snippet) {
+    return snippet.length() <= MAX_SNIPPET_LENGTH ? snippet
+                                                  : snippet.subSequence(0, MAX_SNIPPET_LENGTH);
+  }
+
   private void setThumbnailSnippet(ThreadRecord thread) {
     if (thread.getSnippetUri() != null) {
       this.thumbnailView.setVisibility(View.VISIBLE);
       this.thumbnailView.setImageResource(glideRequests, thread.getSnippetUri());
 
-      LayoutParams subjectParams = (RelativeLayout.LayoutParams)this.subjectView.getLayoutParams();
+      LayoutParams subjectParams = (RelativeLayout.LayoutParams)this.subjectContainer .getLayoutParams();
       subjectParams.addRule(RelativeLayout.LEFT_OF, R.id.thumbnail);
       if (VERSION.SDK_INT >= VERSION_CODES.JELLY_BEAN_MR1) {
         subjectParams.addRule(RelativeLayout.START_OF, R.id.thumbnail);
       }
-      this.subjectView.setLayoutParams(subjectParams);
+      this.subjectContainer.setLayoutParams(subjectParams);
       this.post(new ThumbnailPositioner(thumbnailView, archivedView, deliveryStatusIndicator, dateView));
     } else {
       this.thumbnailView.setVisibility(View.GONE);
 
-      LayoutParams subjectParams = (RelativeLayout.LayoutParams)this.subjectView.getLayoutParams();
+      LayoutParams subjectParams = (RelativeLayout.LayoutParams)this.subjectContainer.getLayoutParams();
       subjectParams.addRule(RelativeLayout.LEFT_OF, R.id.status);
       if (VERSION.SDK_INT >= VERSION_CODES.JELLY_BEAN_MR1) {
         subjectParams.addRule(RelativeLayout.START_OF, R.id.status);
       }
-      this.subjectView.setLayoutParams(subjectParams);
+      this.subjectContainer.setLayoutParams(subjectParams);
     }
   }
 
@@ -230,23 +334,18 @@ public class ConversationListItem extends RelativeLayout
       return;
     }
 
-    unreadIndicator.setImageDrawable(TextDrawable.builder()
-                                                 .beginConfig()
-                                                 .width(ViewUtil.dpToPx(getContext(), 24))
-                                                 .height(ViewUtil.dpToPx(getContext(), 24))
-                                                 .textColor(Color.WHITE)
-                                                 .bold()
-                                                 .endConfig()
-                                                 .buildRound(String.valueOf(thread.getUnreadCount()), getResources().getColor(R.color.textsecure_primary_dark)));
+    unreadIndicator.setText(String.valueOf(unreadCount));
     unreadIndicator.setVisibility(View.VISIBLE);
   }
 
   @Override
   public void onModified(final Recipient recipient) {
     Util.runOnMain(() -> {
-      fromView.setText(recipient, unreadCount == 0);
-      contactPhotoImage.setAvatar(glideRequests, recipient, true);
-      setRippleColor(recipient);
+      if (this.recipient == recipient) {
+        fromView.setText(recipient, unreadCount == 0);
+        contactPhotoImage.setAvatar(glideRequests, recipient, true);
+        setRippleColor(recipient);
+      }
     });
   }
 

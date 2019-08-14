@@ -4,10 +4,10 @@ package org.thoughtcrime.securesms.database.helpers;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 import android.util.Pair;
 
 import com.annimon.stream.function.BiFunction;
@@ -40,8 +40,8 @@ public class SQLCipherMigrationHelper {
                                @NonNull net.sqlcipher.database.SQLiteDatabase modernDb)
   {
     modernDb.beginTransaction();
+    int foregroundId = GenericForegroundService.startForegroundTask(context, context.getString(R.string.SQLCipherMigrationHelper_migrating_signal_database)).getId();
     try {
-      GenericForegroundService.startForegroundTask(context, context.getString(R.string.SQLCipherMigrationHelper_migrating_signal_database));
       copyTable("identities", legacyDb, modernDb, null);
       copyTable("push", legacyDb, modernDb, null);
       copyTable("groups", legacyDb, modernDb, null);
@@ -50,7 +50,7 @@ public class SQLCipherMigrationHelper {
       modernDb.setTransactionSuccessful();
     } finally {
       modernDb.endTransaction();
-      GenericForegroundService.stopForegroundTask(context);
+      GenericForegroundService.stopForegroundTask(context, foregroundId);
     }
   }
 
@@ -65,8 +65,8 @@ public class SQLCipherMigrationHelper {
 
     modernDb.beginTransaction();
 
+    int foregroundId = GenericForegroundService.startForegroundTask(context, context.getString(R.string.SQLCipherMigrationHelper_migrating_signal_database)).getId();
     try {
-      GenericForegroundService.startForegroundTask(context, context.getString(R.string.SQLCipherMigrationHelper_migrating_signal_database));
       int total = 5000;
 
       copyTable("sms", legacyDb, modernDb, (row, progress) -> {
@@ -135,9 +135,11 @@ public class SQLCipherMigrationHelper {
       });
 
       copyTable("thread", legacyDb, modernDb, (row, progress) -> {
+        Long snippetType = row.getAsLong("snippet_type");
+        if (snippetType == null) snippetType = 0L;
+
         Pair<Long, String> plaintext = getPlaintextBody(legacyCipher, legacyAsymmetricCipher,
-                                                        row.getAsLong("snippet_type"),
-                                                        row.getAsString("snippet"));
+                                                        snippetType, row.getAsString("snippet"));
 
         row.put("snippet", plaintext.second);
         row.put("snippet_type", plaintext.first);
@@ -173,7 +175,7 @@ public class SQLCipherMigrationHelper {
       modernDb.setTransactionSuccessful();
     } finally {
       modernDb.endTransaction();
-      GenericForegroundService.stopForegroundTask(context);
+      GenericForegroundService.stopForegroundTask(context, foregroundId);
     }
   }
 

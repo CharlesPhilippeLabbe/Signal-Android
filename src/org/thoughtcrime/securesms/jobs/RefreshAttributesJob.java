@@ -1,56 +1,79 @@
 package org.thoughtcrime.securesms.jobs;
 
-import android.content.Context;
-import android.util.Log;
+import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.dependencies.InjectableType;
+import org.thoughtcrime.securesms.ApplicationContext;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
+
+import org.thoughtcrime.securesms.crypto.UnidentifiedAccessUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 import org.whispersystems.signalservice.api.push.exceptions.NetworkFailureException;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 
-import javax.inject.Inject;
+public class RefreshAttributesJob extends BaseJob {
 
-public class RefreshAttributesJob extends ContextJob implements InjectableType {
-
-  public static final long serialVersionUID = 1L;
+  public static final String KEY = "RefreshAttributesJob";
 
   private static final String TAG = RefreshAttributesJob.class.getSimpleName();
 
-  @Inject transient SignalServiceAccountManager signalAccountManager;
+  public RefreshAttributesJob() {
+    this(new Job.Parameters.Builder()
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setQueue("RefreshAttributesJob")
+                           .build());
+  }
 
-  public RefreshAttributesJob(Context context) {
-    super(context, JobParameters.newBuilder()
-                                .withPersistence()
-                                .withRequirement(new NetworkRequirement(context))
-                                .withWakeLock(true, 30, TimeUnit.SECONDS)
-                                .withGroupId(RefreshAttributesJob.class.getName())
-                                .create());
+  private RefreshAttributesJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onAdded() {}
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
+  }
+
+  @Override
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
 
   @Override
   public void onRun() throws IOException {
-    String  signalingKey      = TextSecurePreferences.getSignalingKey(context);
-    int     registrationId    = TextSecurePreferences.getLocalRegistrationId(context);
-    boolean fetchesMessages   = TextSecurePreferences.isGcmDisabled(context);
+    int     registrationId              = TextSecurePreferences.getLocalRegistrationId(context);
+    boolean fetchesMessages             = TextSecurePreferences.isFcmDisabled(context);
+    String  pin                         = TextSecurePreferences.getRegistrationLockPin(context);
+    byte[]  unidentifiedAccessKey       = UnidentifiedAccessUtil.getSelfUnidentifiedAccessKey(context);
+    boolean universalUnidentifiedAccess = TextSecurePreferences.isUniversalUnidentifiedAccess(context);
 
-    signalAccountManager.setAccountAttributes(signalingKey, registrationId, fetchesMessages);
+    SignalServiceAccountManager signalAccountManager = ApplicationDependencies.getSignalServiceAccountManager();
+    signalAccountManager.setAccountAttributes(null, registrationId, fetchesMessages, pin,
+                                              unidentifiedAccessKey, universalUnidentifiedAccess);
+
+    ApplicationContext.getInstance(context)
+                      .getJobManager()
+                      .add(new RefreshUnidentifiedDeliveryAbilityJob());
   }
 
   @Override
-  public boolean onShouldRetry(Exception e) {
+  public boolean onShouldRetry(@NonNull Exception e) {
     return e instanceof NetworkFailureException;
   }
 
   @Override
   public void onCanceled() {
     Log.w(TAG, "Failed to update account attributes!");
+  }
+
+  public static class Factory implements Job.Factory<RefreshAttributesJob> {
+    @Override
+    public @NonNull RefreshAttributesJob create(@NonNull Parameters parameters, @NonNull org.thoughtcrime.securesms.jobmanager.Data data) {
+      return new RefreshAttributesJob(parameters);
+    }
   }
 }

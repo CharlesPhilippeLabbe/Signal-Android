@@ -4,7 +4,7 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.os.Build.VERSION_CODES;
-import android.support.v4.content.ContextCompat;
+import androidx.core.content.ContextCompat;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.ImageView;
@@ -37,8 +37,8 @@ public class AlertView extends LinearLayout {
   private void initialize(AttributeSet attrs) {
     inflate(getContext(), R.layout.alert_view, this);
 
-    approvalIndicator = (ImageView) findViewById(R.id.pending_approval_indicator);
-    failedIndicator   = (ImageView) findViewById(R.id.sms_failed_indicator);
+    approvalIndicator = findViewById(R.id.pending_approval_indicator);
+    failedIndicator   = findViewById(R.id.sms_failed_indicator);
 
     if (attrs != null) {
       TypedArray typedArray = getContext().getTheme().obtainStyledAttributes(attrs, R.styleable.AlertView, 0, 0);
@@ -46,7 +46,10 @@ public class AlertView extends LinearLayout {
       typedArray.recycle();
 
       if (useSmallIcon) {
-        failedIndicator.setImageDrawable(ContextCompat.getDrawable(getContext(), R.drawable.ic_error_red_18dp));
+        int size = getResources().getDimensionPixelOffset(R.dimen.alertview_small_icon_size);
+        failedIndicator.getLayoutParams().width  = size;
+        failedIndicator.getLayoutParams().height = size;
+        requestLayout();
       }
     }
   }

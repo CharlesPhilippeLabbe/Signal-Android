@@ -16,11 +16,17 @@
  */
 package org.thoughtcrime.securesms.mms;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
-import android.util.Log;
+
+import org.thoughtcrime.securesms.logging.Log;
 
 import org.apache.http.Header;
 import org.apache.http.auth.AuthScope;
@@ -127,13 +133,13 @@ public abstract class LegacyMmsConnection {
       return true;
     }
 
-    Log.w(TAG, "Checking route to address: " + host + ", " + inetAddress.getHostAddress());
+    Log.i(TAG, "Checking route to address: " + host + ", " + inetAddress.getHostAddress());
     ConnectivityManager manager = (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
     try {
       final Method  requestRouteMethod  = manager.getClass().getMethod("requestRouteToHostAddress", Integer.TYPE, InetAddress.class);
       final boolean routeToHostObtained = (Boolean) requestRouteMethod.invoke(manager, MmsRadio.TYPE_MOBILE_MMS, inetAddress);
-      Log.w(TAG, "requestRouteToHostAddress(" + inetAddress + ") -> " + routeToHostObtained);
+      Log.i(TAG, "requestRouteToHostAddress(" + inetAddress + ") -> " + routeToHostObtained);
       return routeToHostObtained;
     } catch (NoSuchMethodException nsme) {
       Log.w(TAG, nsme);
@@ -151,7 +157,7 @@ public abstract class LegacyMmsConnection {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     Util.copy(in, baos);
 
-    Log.w(TAG, "Received full server response, " + baos.size() + " bytes");
+    Log.i(TAG, "Received full server response, " + baos.size() + " bytes");
 
     return baos.toByteArray();
   }
@@ -183,7 +189,7 @@ public abstract class LegacyMmsConnection {
   }
 
   protected byte[] execute(HttpUriRequest request) throws IOException {
-    Log.w(TAG, "connecting to " + apn.getMmsc());
+    Log.i(TAG, "connecting to " + apn.getMmsc());
 
     CloseableHttpClient   client   = null;
     CloseableHttpResponse response = null;
@@ -191,14 +197,14 @@ public abstract class LegacyMmsConnection {
       client   = constructHttpClient();
       response = client.execute(request);
 
-      Log.w(TAG, "* response code: " + response.getStatusLine());
+      Log.i(TAG, "* response code: " + response.getStatusLine());
 
       if (response.getStatusLine().getStatusCode() == 200) {
         return parseResponse(response.getEntity().getContent());
       }
     } catch (NullPointerException npe) {
       // TODO determine root cause
-      // see: https://github.com/WhisperSystems/Signal-Android/issues/4379
+      // see: https://github.com/signalapp/Signal-Android/issues/4379
       throw new IOException(npe);
     } finally {
       if (response != null) response.close();
@@ -209,7 +215,7 @@ public abstract class LegacyMmsConnection {
   }
 
   protected List<Header> getBaseHeaders() {
-    final String                number    = TelephonyUtil.getManager(context).getLine1Number(); ;
+    final String number = getLine1Number(context);
 
     return new LinkedList<Header>() {{
       add(new BasicHeader("Accept", "*/*, application/vnd.wap.mms-message, application/vnd.wap.sic"));
@@ -221,6 +227,17 @@ public abstract class LegacyMmsConnection {
         add(new BasicHeader("X-MDN", number));
       }
     }};
+  }
+
+  @SuppressLint("HardwareIds")
+  private static String getLine1Number(@NonNull Context context) {
+    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)           == PackageManager.PERMISSION_GRANTED ||
+        ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED ||
+        ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE)   == PackageManager.PERMISSION_GRANTED) {
+      return TelephonyUtil.getManager(context).getLine1Number();
+    } else {
+      return "";
+    }
   }
 
   public static class Apn {
@@ -284,7 +301,7 @@ public abstract class LegacyMmsConnection {
     }
 
     @Override
-    public String toString() {
+    public @NonNull String toString() {
       return Apn.class.getSimpleName() +
           "{ mmsc: \"" + mmsc + "\"" +
           ", proxy: " + (proxy == null ? "none" : '"' + proxy + '"') +

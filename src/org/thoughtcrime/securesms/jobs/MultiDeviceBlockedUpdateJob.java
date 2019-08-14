@@ -1,16 +1,19 @@
 package org.thoughtcrime.securesms.jobs;
 
-import android.content.Context;
+import androidx.annotation.NonNull;
 
-import org.thoughtcrime.securesms.crypto.MasterSecret;
+import org.thoughtcrime.securesms.crypto.UnidentifiedAccessUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
-import org.thoughtcrime.securesms.database.RecipientDatabase.BlockedReader;
-import org.thoughtcrime.securesms.dependencies.InjectableType;
-import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirement;
+import org.thoughtcrime.securesms.database.RecipientDatabase.RecipientReader;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.jobqueue.requirements.NetworkRequirement;
+import org.thoughtcrime.securesms.util.GroupUtil;
+import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.signalservice.api.SignalServiceMessageSender;
 import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
 import org.whispersystems.signalservice.api.messages.multidevice.BlockedListMessage;
@@ -20,58 +23,83 @@ import org.whispersystems.signalservice.api.push.exceptions.PushNetworkException
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-import javax.inject.Inject;
+public class MultiDeviceBlockedUpdateJob extends BaseJob {
 
-public class MultiDeviceBlockedUpdateJob extends MasterSecretJob implements InjectableType {
+  public static final String KEY = "MultiDeviceBlockedUpdateJob";
 
-  private static final long serialVersionUID = 1L;
-
+  @SuppressWarnings("unused")
   private static final String TAG = MultiDeviceBlockedUpdateJob.class.getSimpleName();
 
-  @Inject transient SignalServiceMessageSender messageSender;
+  public MultiDeviceBlockedUpdateJob() {
+    this(new Job.Parameters.Builder()
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setQueue("MultiDeviceBlockedUpdateJob")
+                           .setLifespan(TimeUnit.DAYS.toMillis(1))
+                           .setMaxAttempts(Parameters.UNLIMITED)
+                           .build());
+  }
 
-  public MultiDeviceBlockedUpdateJob(Context context) {
-    super(context, JobParameters.newBuilder()
-                                .withRequirement(new NetworkRequirement(context))
-                                .withRequirement(new MasterSecretRequirement(context))
-                                .withGroupId(MultiDeviceBlockedUpdateJob.class.getSimpleName())
-                                .withPersistence()
-                                .create());
+  private MultiDeviceBlockedUpdateJob(@NonNull Job.Parameters parameters) {
+    super(parameters);
   }
 
   @Override
-  public void onRun(MasterSecret masterSecret)
+  public @NonNull Data serialize() {
+    return Data.EMPTY;
+  }
+
+  @Override
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
+
+  @Override
+  public void onRun()
       throws IOException, UntrustedIdentityException
   {
-    RecipientDatabase database = DatabaseFactory.getRecipientDatabase(context);
-    BlockedReader     reader   = database.readerForBlocked(database.getBlocked());
-    List<String>      blocked  = new LinkedList<>();
-
-    Recipient recipient;
-
-    while ((recipient = reader.getNext()) != null) {
-      if (!recipient.isGroupRecipient()) {
-        blocked.add(recipient.getAddress().serialize());
-      }
+    if (!TextSecurePreferences.isMultiDevice(context)) {
+      Log.i(TAG, "Not multi device, aborting...");
+      return;
     }
 
-    messageSender.sendMessage(SignalServiceSyncMessage.forBlocked(new BlockedListMessage(blocked)));
+    RecipientDatabase database = DatabaseFactory.getRecipientDatabase(context);
+
+    try (RecipientReader reader = database.readerForBlocked(database.getBlocked())) {
+      List<String> blockedIndividuals = new LinkedList<>();
+      List<byte[]> blockedGroups      = new LinkedList<>();
+
+      Recipient recipient;
+
+      while ((recipient = reader.getNext()) != null) {
+        if (recipient.isGroupRecipient()) {
+          blockedGroups.add(GroupUtil.getDecodedId(recipient.getAddress().toGroupString()));
+        } else {
+          blockedIndividuals.add(recipient.getAddress().serialize());
+        }
+      }
+
+      SignalServiceMessageSender messageSender = ApplicationDependencies.getSignalServiceMessageSender();
+      messageSender.sendMessage(SignalServiceSyncMessage.forBlocked(new BlockedListMessage(blockedIndividuals, blockedGroups)),
+                                UnidentifiedAccessUtil.getAccessForSync(context));
+    }
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
+  public boolean onShouldRetry(@NonNull Exception exception) {
     if (exception instanceof PushNetworkException) return true;
     return false;
   }
 
   @Override
-  public void onAdded() {
-
+  public void onCanceled() {
   }
 
-  @Override
-  public void onCanceled() {
-
+  public static final class Factory implements Job.Factory<MultiDeviceBlockedUpdateJob> {
+    @Override
+    public @NonNull MultiDeviceBlockedUpdateJob create(@NonNull Parameters parameters, @NonNull Data data) {
+      return new MultiDeviceBlockedUpdateJob(parameters);
+    }
   }
 }

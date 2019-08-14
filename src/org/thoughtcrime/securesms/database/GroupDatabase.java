@@ -6,8 +6,8 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
 
 import com.annimon.stream.Stream;
@@ -22,8 +22,8 @@ import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.messages.SignalServiceAttachmentPointer;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -247,6 +247,10 @@ public class GroupDatabase extends Database {
 
     databaseHelper.getWritableDatabase().update(TABLE_NAME, contents, GROUP_ID + " = ?",
                                                 new String[] {groupId});
+
+    Recipient.applyCached(Address.fromSerialized(groupId), recipient -> {
+      recipient.setParticipants(Stream.of(members).map(a -> Recipient.from(context, a, false)).toList());
+    });
   }
 
   public void remove(String groupId, Address source) {
@@ -258,6 +262,14 @@ public class GroupDatabase extends Database {
 
     databaseHelper.getWritableDatabase().update(TABLE_NAME, contents, GROUP_ID + " = ?",
                                                 new String[] {groupId});
+
+    Recipient.applyCached(Address.fromSerialized(groupId), recipient -> {
+      List<Recipient> current = recipient.getParticipants();
+      Recipient       removal = Recipient.from(context, source, false);
+
+      current.remove(removal);
+      recipient.setParticipants(current);
+    });
   }
 
   private List<Address> getCurrentMembers(String groupId) {
@@ -295,16 +307,12 @@ public class GroupDatabase extends Database {
 
 
   public byte[] allocateGroupId() {
-    try {
-      byte[] groupId = new byte[16];
-      SecureRandom.getInstance("SHA1PRNG").nextBytes(groupId);
-      return groupId;
-    } catch (NoSuchAlgorithmException e) {
-      throw new AssertionError(e);
-    }
+    byte[] groupId = new byte[16];
+    new SecureRandom().nextBytes(groupId);
+    return groupId;
   }
 
-  public static class Reader {
+  public static class Reader implements Closeable {
 
     private final Cursor cursor;
 
@@ -338,6 +346,7 @@ public class GroupDatabase extends Database {
                              cursor.getInt(cursor.getColumnIndexOrThrow(MMS)) == 1);
     }
 
+    @Override
     public void close() {
       if (this.cursor != null)
         this.cursor.close();

@@ -11,11 +11,10 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
-import android.util.Log;
 import android.widget.TextView;
 
 import org.thoughtcrime.securesms.R;
@@ -23,10 +22,12 @@ import org.thoughtcrime.securesms.components.emoji.parsing.EmojiDrawInfo;
 import org.thoughtcrime.securesms.components.emoji.parsing.EmojiPageBitmap;
 import org.thoughtcrime.securesms.components.emoji.parsing.EmojiParser;
 import org.thoughtcrime.securesms.components.emoji.parsing.EmojiTree;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.FutureTaskListener;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.Pair;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 class EmojiProvider {
@@ -60,12 +61,13 @@ class EmojiProvider {
     this.decodeScale = Math.min(1f, context.getResources().getDimension(R.dimen.emoji_drawer_size) / EMOJI_RAW_HEIGHT);
     this.verticalPad = EMOJI_VERT_PAD * this.decodeScale;
 
-    for (EmojiPageModel page : EmojiPages.PAGES) {
+    for (EmojiPageModel page : EmojiPages.DATA_PAGES) {
       if (page.hasSpriteMap()) {
         EmojiPageBitmap pageBitmap = new EmojiPageBitmap(context, page, decodeScale);
 
-        for (int i=0;i<page.getEmoji().length;i++) {
-          emojiTree.add(page.getEmoji()[i], new EmojiDrawInfo(pageBitmap, i));
+        List<String> emojis = page.getEmoji();
+        for (int i = 0; i < emojis.size(); i++) {
+          emojiTree.add(emojis.get(i), new EmojiDrawInfo(pageBitmap, i));
         }
       }
     }

@@ -1,7 +1,7 @@
 package org.thoughtcrime.securesms;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -81,16 +81,22 @@ class MessageDetailsRecipientAdapter extends BaseAdapter implements AbsListView.
 
     private final Recipient recipient;
     private final Status    deliveryStatus;
+    private final boolean   isUnidentified;
     private final long      timestamp;
 
-    RecipientDeliveryStatus(Recipient recipient, Status deliveryStatus, long timestamp) {
+    RecipientDeliveryStatus(Recipient recipient, Status deliveryStatus, boolean isUnidentified, long timestamp) {
       this.recipient      = recipient;
       this.deliveryStatus = deliveryStatus;
+      this.isUnidentified = isUnidentified;
       this.timestamp      = timestamp;
     }
 
     Status getDeliveryStatus() {
       return deliveryStatus;
+    }
+
+    boolean isUnidentified() {
+      return isUnidentified;
     }
 
     public long getTimestamp() {

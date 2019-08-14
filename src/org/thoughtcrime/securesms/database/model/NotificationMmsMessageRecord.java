@@ -17,6 +17,7 @@
 package org.thoughtcrime.securesms.database.model;
 
 import android.content.Context;
+import androidx.annotation.NonNull;
 import android.text.SpannableString;
 
 import org.thoughtcrime.securesms.R;
@@ -27,6 +28,7 @@ import org.thoughtcrime.securesms.database.documents.NetworkFailure;
 import org.thoughtcrime.securesms.mms.SlideDeck;
 import org.thoughtcrime.securesms.recipients.Recipient;
 
+import java.util.Collections;
 import java.util.LinkedList;
 
 /**
@@ -45,17 +47,17 @@ public class NotificationMmsMessageRecord extends MmsMessageRecord {
   private final int    status;
   private final byte[] transactionId;
 
-  public NotificationMmsMessageRecord(Context context, long id, Recipient conversationRecipient,
+  public NotificationMmsMessageRecord(long id, Recipient conversationRecipient,
                                       Recipient individualRecipient, int recipientDeviceId,
                                       long dateSent, long dateReceived, int deliveryReceiptCount,
                                       long threadId, byte[] contentLocation, long messageSize,
                                       long expiry, int status, byte[] transactionId, long mailbox,
                                       int subscriptionId, SlideDeck slideDeck, int readReceiptCount)
   {
-    super(context, id, "", conversationRecipient, individualRecipient, recipientDeviceId,
+    super(id, "", conversationRecipient, individualRecipient, recipientDeviceId,
           dateSent, dateReceived, threadId, Status.STATUS_NONE, deliveryReceiptCount, mailbox,
           new LinkedList<IdentityKeyMismatch>(), new LinkedList<NetworkFailure>(), subscriptionId,
-          0, 0, slideDeck, readReceiptCount);
+          0, 0, false, slideDeck, readReceiptCount, null, Collections.emptyList(), Collections.emptyList(), false);
 
     this.contentLocation = contentLocation;
     this.messageSize     = messageSize;
@@ -110,7 +112,7 @@ public class NotificationMmsMessageRecord extends MmsMessageRecord {
   }
 
   @Override
-  public SpannableString getDisplayBody() {
+  public SpannableString getDisplayBody(@NonNull Context context) {
     if (status == MmsDatabase.Status.DOWNLOAD_INITIALIZED) {
       return emphasisAdded(context.getString(R.string.NotificationMmsMessageRecord_multimedia_message));
     } else if (status == MmsDatabase.Status.DOWNLOAD_CONNECTING) {

@@ -5,71 +5,110 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import androidx.annotation.NonNull;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.SmsManager;
-import android.util.Log;
 
-import org.thoughtcrime.securesms.crypto.MasterSecret;
+import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.jobmanager.Data;
+import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkOrCellServiceConstraint;
+import org.thoughtcrime.securesms.jobmanager.impl.CellServiceConstraint;
+
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.model.SmsMessageRecord;
-import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirement;
-import org.thoughtcrime.securesms.jobs.requirements.NetworkOrServiceRequirement;
-import org.thoughtcrime.securesms.jobs.requirements.ServiceRequirement;
 import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.SmsDeliveryListener;
 import org.thoughtcrime.securesms.transport.UndeliverableMessageException;
 import org.thoughtcrime.securesms.util.NumberUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.whispersystems.jobqueue.JobParameters;
 
 import java.util.ArrayList;
 
 public class SmsSendJob extends SendJob {
 
-  private static final String TAG = SmsSendJob.class.getSimpleName();
+  public static final String KEY = "SmsSendJob";
 
-  private final long messageId;
+  private static final String TAG              = SmsSendJob.class.getSimpleName();
+  private static final int    MAX_ATTEMPTS     = 15;
+  private static final String KEY_MESSAGE_ID   = "message_id";
+  private static final String KEY_RUN_ATTEMPT  = "run_attempt";
 
-  public SmsSendJob(Context context, long messageId, String name) {
-    super(context, constructParameters(context, name));
-    this.messageId = messageId;
+  private long messageId;
+  private int  runAttempt;
+
+  public SmsSendJob(Context context, long messageId, @NonNull Address destination) {
+    this(context, messageId, destination, 0);
+  }
+
+  public SmsSendJob(Context context, long messageId, @NonNull Address destination, int runAttempt) {
+    this(constructParameters(context, destination), messageId, runAttempt);
+  }
+
+  private SmsSendJob(@NonNull Job.Parameters parameters, long messageId, int runAttempt) {
+    super(parameters);
+
+    this.messageId  = messageId;
+    this.runAttempt = runAttempt;
   }
 
   @Override
-  public void onAdded() {}
+  public @NonNull Data serialize() {
+    return new Data.Builder().putLong(KEY_MESSAGE_ID, messageId)
+                             .putInt(KEY_RUN_ATTEMPT, runAttempt)
+                             .build();
+  }
 
   @Override
-  public void onSend(MasterSecret masterSecret) throws NoSuchMessageException {
+  public @NonNull String getFactoryKey() {
+    return KEY;
+  }
+
+  @Override
+  public void onSend() throws NoSuchMessageException, TooManyRetriesException {
+    if (runAttempt >= MAX_ATTEMPTS) {
+      warn(TAG, "Hit the retry limit. Failing.");
+      throw new TooManyRetriesException();
+    }
+
     SmsDatabase      database = DatabaseFactory.getSmsDatabase(context);
     SmsMessageRecord record   = database.getMessage(messageId);
 
-    try {
-      Log.w(TAG, "Sending message: " + messageId);
+    if (!record.isPending() && !record.isFailed()) {
+      warn(TAG, "Message " + messageId + " was already sent. Ignoring.");
+      return;
+    }
 
+    try {
+      log(TAG, "Sending message: " + messageId + " (attempt " + runAttempt + ")");
       deliver(record);
+      log(TAG, "Sent message: " + messageId);
     } catch (UndeliverableMessageException ude) {
-      Log.w(TAG, ude);
+      warn(TAG, ude);
       DatabaseFactory.getSmsDatabase(context).markAsSentFailed(record.getId());
       MessageNotifier.notifyMessageDeliveryFailed(context, record.getRecipient(), record.getThreadId());
     }
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception throwable) {
+  public boolean onShouldRetry(@NonNull Exception throwable) {
     return false;
   }
 
   @Override
   public void onCanceled() {
-    Log.w(TAG, "onCanceled()");
+    warn(TAG, "onCanceled() messageId: " + messageId);
     long      threadId  = DatabaseFactory.getSmsDatabase(context).getThreadIdForMessage(messageId);
     Recipient recipient = DatabaseFactory.getThreadDatabase(context).getRecipientForThreadId(threadId);
 
     DatabaseFactory.getSmsDatabase(context).markAsSentFailed(messageId);
-    MessageNotifier.notifyMessageDeliveryFailed(context, recipient, threadId);
+
+    if (threadId != -1 && recipient != null) {
+      MessageNotifier.notifyMessageDeliveryFailed(context, recipient, threadId);
+    }
   }
 
   private void deliver(SmsMessageRecord message)
@@ -104,9 +143,9 @@ public class SmsSendJob extends SendJob {
     try {
       getSmsManagerFor(message.getSubscriptionId()).sendMultipartTextMessage(recipient, null, messages, sentIntents, deliveredIntents);
     } catch (NullPointerException | IllegalArgumentException npe) {
-      Log.w(TAG, npe);
-      Log.w(TAG, "Recipient: " + recipient);
-      Log.w(TAG, "Message Parts: " + messages.size());
+      warn(TAG, npe);
+      log(TAG, "Recipient: " + recipient);
+      log(TAG, "Message Parts: " + messages.size());
 
       try {
         for (int i=0;i<messages.size();i++) {
@@ -115,11 +154,11 @@ public class SmsSendJob extends SendJob {
                                                                         deliveredIntents == null ? null : deliveredIntents.get(i));
         }
       } catch (NullPointerException | IllegalArgumentException npe2) {
-        Log.w(TAG, npe);
+        warn(TAG, npe);
         throw new UndeliverableMessageException(npe2);
       }
     } catch (SecurityException se) {
-      Log.w(TAG, se);
+      warn(TAG, se);
       throw new UndeliverableMessageException(se);
     }
   }
@@ -163,6 +202,7 @@ public class SmsSendJob extends SendJob {
 
     pending.putExtra("type", type);
     pending.putExtra("message_id", messageId);
+    pending.putExtra("run_attempt", Math.max(runAttempt, getRunAttempt()));
     pending.putExtra("upgraded", upgraded);
     pending.putExtra("push", push);
 
@@ -187,21 +227,22 @@ public class SmsSendJob extends SendJob {
     }
   }
 
-  private static JobParameters constructParameters(Context context, String name) {
-    JobParameters.Builder builder = JobParameters.newBuilder()
-                                                 .withPersistence()
-                                                 .withRequirement(new MasterSecretRequirement(context))
-                                                 .withRetryCount(15)
-                                                 .withGroupId(name);
-
-    if (TextSecurePreferences.isWifiSmsEnabled(context)) {
-      builder.withRequirement(new NetworkOrServiceRequirement(context));
-    } else {
-      builder.withRequirement(new ServiceRequirement(context));
-    }
-
-    return builder.create();
+  private static Job.Parameters constructParameters(@NonNull Context context, @NonNull Address destination) {
+    String constraint = TextSecurePreferences.isWifiSmsEnabled(context) ? NetworkOrCellServiceConstraint.KEY
+                                                                        : CellServiceConstraint.KEY;
+    return new Job.Parameters.Builder()
+                             .setMaxAttempts(MAX_ATTEMPTS)
+                             .setQueue(destination.serialize())
+                             .addConstraint(constraint)
+                             .build();
   }
 
+  private static class TooManyRetriesException extends Exception { }
 
+  public static class Factory implements Job.Factory<SmsSendJob> {
+    @Override
+    public @NonNull SmsSendJob create(@NonNull Parameters parameters, @NonNull org.thoughtcrime.securesms.jobmanager.Data data) {
+      return new SmsSendJob(parameters, data.getLong(KEY_MESSAGE_ID), data.getInt(KEY_RUN_ATTEMPT));
+    }
+  }
 }

@@ -1,9 +1,10 @@
 package org.thoughtcrime.securesms.components;
 
 import android.content.Context;
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.AppCompatImageButton;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.ImageButton;
 
 import org.thoughtcrime.securesms.TransportOption;
 import org.thoughtcrime.securesms.TransportOptions;
@@ -12,7 +13,7 @@ import org.thoughtcrime.securesms.TransportOptionsPopup;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
 
-public class SendButton extends ImageButton
+public class SendButton extends AppCompatImageButton
     implements TransportOptions.OnTransportChangedListener,
                TransportOptionsPopup.SelectedListener,
                View.OnLongClickListener
@@ -44,6 +45,8 @@ public class SendButton extends ImageButton
   }
 
   private TransportOptions initializeTransportOptions(boolean media) {
+    if (isInEditMode()) return null;
+
     TransportOptions transportOptions = new TransportOptions(getContext(), media);
     transportOptions.addOnTransportChangedListener(this);
 
@@ -83,6 +86,10 @@ public class SendButton extends ImageButton
     transportOptions.setDefaultTransport(type);
   }
 
+  public void setTransport(@NonNull TransportOption option) {
+    transportOptions.setSelectedTransport(option);
+  }
+
   public void setDefaultSubscriptionId(Optional<Integer> subscriptionId) {
     transportOptions.setDefaultSubscriptionId(subscriptionId);
   }
@@ -101,7 +108,7 @@ public class SendButton extends ImageButton
 
   @Override
   public boolean onLongClick(View v) {
-    if (transportOptions.getEnabledTransports().size() > 1) {
+    if (isEnabled() && transportOptions.getEnabledTransports().size() > 1) {
       getTransportOptionsPopup().display(transportOptions.getEnabledTransports());
       return true;
     }

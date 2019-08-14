@@ -3,7 +3,8 @@ package org.thoughtcrime.securesms.contacts.avatars;
 
 import android.content.Context;
 import android.net.Uri;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.util.Conversions;
@@ -27,11 +28,20 @@ public class SystemContactPhoto implements ContactPhoto {
   @Override
   public InputStream openInputStream(Context context) throws FileNotFoundException {
     return context.getContentResolver().openInputStream(contactPhotoUri);
-
   }
 
   @Override
-  public void updateDiskCacheKey(MessageDigest messageDigest) {
+  public @Nullable Uri getUri(@NonNull Context context) {
+    return contactPhotoUri;
+  }
+
+  @Override
+  public boolean isProfilePhoto() {
+    return false;
+  }
+
+  @Override
+  public void updateDiskCacheKey(@NonNull MessageDigest messageDigest) {
     messageDigest.update(address.serialize().getBytes());
     messageDigest.update(contactPhotoUri.toString().getBytes());
     messageDigest.update(Conversions.longToByteArray(lastModifiedTime));

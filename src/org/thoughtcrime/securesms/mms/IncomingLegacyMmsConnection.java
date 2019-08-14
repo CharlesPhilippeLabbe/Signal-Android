@@ -18,9 +18,9 @@ package org.thoughtcrime.securesms.mms;
 
 import android.content.Context;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import org.thoughtcrime.securesms.logging.Log;
 
 import com.google.android.mms.InvalidHeaderValueException;
 import com.google.android.mms.pdu_alt.NotifyRespInd;
@@ -78,7 +78,7 @@ public class IncomingLegacyMmsConnection extends LegacyMmsConnection implements 
     Apn contentApn = new Apn(contentLocation, apn.getProxy(), Integer.toString(apn.getPort()), apn.getUsername(), apn.getPassword());
 
     if (isDirectConnect()) {
-      Log.w(TAG, "Connecting directly...");
+      Log.i(TAG, "Connecting directly...");
       try {
         return retrieve(contentApn, transactionId, false, false);
       } catch (IOException | ApnUnavailableException e) {
@@ -86,11 +86,11 @@ public class IncomingLegacyMmsConnection extends LegacyMmsConnection implements 
       }
     }
 
-    Log.w(TAG, "Changing radio to MMS mode..");
+    Log.i(TAG, "Changing radio to MMS mode..");
     radio.connect();
 
     try {
-      Log.w(TAG, "Downloading in MMS mode with proxy...");
+      Log.i(TAG, "Downloading in MMS mode with proxy...");
 
       try {
         return retrieve(contentApn, transactionId, true, true);
@@ -98,7 +98,7 @@ public class IncomingLegacyMmsConnection extends LegacyMmsConnection implements 
         Log.w(TAG, e);
       }
 
-      Log.w(TAG, "Downloading in MMS mode without proxy...");
+      Log.i(TAG, "Downloading in MMS mode without proxy...");
 
       return retrieve(contentApn, transactionId, true, false);
 
@@ -117,7 +117,7 @@ public class IncomingLegacyMmsConnection extends LegacyMmsConnection implements 
                              ? contentApn.getProxy()
                              : Uri.parse(contentApn.getMmsc()).getHost();
     if (checkRouteToHost(context, targetHost, usingMmsRadio)) {
-      Log.w(TAG, "got successful route to host " + targetHost);
+      Log.i(TAG, "got successful route to host " + targetHost);
       pdu = execute(constructRequest(contentApn, useProxy));
     }
 

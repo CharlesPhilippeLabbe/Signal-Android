@@ -16,6 +16,7 @@
  */
 package org.thoughtcrime.securesms;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -27,23 +28,23 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.design.widget.Snackbar;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.Loader;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.view.ActionMode;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.helper.ItemTouchHelper;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.snackbar.Snackbar;
+import androidx.fragment.app.Fragment;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.Loader;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ActionMode;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -51,7 +52,9 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
@@ -66,23 +69,27 @@ import org.thoughtcrime.securesms.components.reminder.OutdatedBuildReminder;
 import org.thoughtcrime.securesms.components.reminder.PushRegistrationReminder;
 import org.thoughtcrime.securesms.components.reminder.Reminder;
 import org.thoughtcrime.securesms.components.reminder.ReminderView;
+import org.thoughtcrime.securesms.components.reminder.ServiceOutageReminder;
 import org.thoughtcrime.securesms.components.reminder.ShareReminder;
 import org.thoughtcrime.securesms.components.reminder.SystemSmsImportReminder;
 import org.thoughtcrime.securesms.components.reminder.UnauthorizedReminder;
-import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MessagingDatabase.MarkedMessageInfo;
 import org.thoughtcrime.securesms.database.loaders.ConversationListLoader;
 import org.thoughtcrime.securesms.events.ReminderUpdateEvent;
+import org.thoughtcrime.securesms.jobs.ServiceOutageDetectionJob;
+import org.thoughtcrime.securesms.mediasend.MediaSendActivity;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.notifications.MarkReadReceiver;
 import org.thoughtcrime.securesms.notifications.MessageNotifier;
+import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.task.SnackbarAsyncTask;
 import org.whispersystems.libsignal.util.guava.Optional;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -97,12 +104,20 @@ public class ConversationListFragment extends Fragment
   @SuppressWarnings("unused")
   private static final String TAG = ConversationListFragment.class.getSimpleName();
 
+  private static final int[] EMPTY_IMAGES = new int[] { R.drawable.empty_inbox_1,
+                                                        R.drawable.empty_inbox_2,
+                                                        R.drawable.empty_inbox_3,
+                                                        R.drawable.empty_inbox_4,
+                                                        R.drawable.empty_inbox_5 };
+
   private ActionMode                  actionMode;
   private RecyclerView                list;
   private ReminderView                reminderView;
   private View                        emptyState;
+  private ImageView                   emptyImage;
   private TextView                    emptySearch;
   private PulsingFloatingActionButton fab;
+  private PulsingFloatingActionButton cameraFab;
   private Locale                      locale;
   private String                      queryFilter  = "";
   private boolean                     archive;
@@ -121,18 +136,24 @@ public class ConversationListFragment extends Fragment
     reminderView = ViewUtil.findById(view, R.id.reminder);
     list         = ViewUtil.findById(view, R.id.list);
     fab          = ViewUtil.findById(view, R.id.fab);
+    cameraFab    = ViewUtil.findById(view, R.id.camera_fab);
     emptyState   = ViewUtil.findById(view, R.id.empty_state);
+    emptyImage   = ViewUtil.findById(view, R.id.empty);
     emptySearch  = ViewUtil.findById(view, R.id.empty_search);
 
-    if (archive) fab.setVisibility(View.GONE);
-    else         fab.setVisibility(View.VISIBLE);
+    if (archive) {
+      fab.hide();
+      cameraFab.hide();
+    } else {
+      fab.show();
+      cameraFab.show();
+    }
 
     reminderView.setOnDismissListener(() -> updateReminders(true));
 
     list.setHasFixedSize(true);
     list.setLayoutManager(new LinearLayoutManager(getActivity()));
     list.setItemAnimator(new DeleteItemAnimator());
-    list.addItemDecoration(new InsetDividerItemDecoration(getActivity()));
 
     new ItemTouchHelper(new ArchiveListenerCallback()).attachToRecyclerView(list);
 
@@ -145,7 +166,18 @@ public class ConversationListFragment extends Fragment
 
     setHasOptionsMenu(true);
     fab.setOnClickListener(v -> startActivity(new Intent(getActivity(), NewConversationActivity.class)));
+    cameraFab.setOnClickListener(v -> {
+      Permissions.with(requireActivity())
+                 .request(Manifest.permission.CAMERA)
+                 .ifNecessary()
+                 .withRationaleDialog(getString(R.string.ConversationActivity_to_capture_photos_and_video_allow_signal_access_to_the_camera), R.drawable.ic_photo_camera_white_48dp)
+                 .withPermanentDenialDialog(getString(R.string.ConversationActivity_signal_needs_the_camera_permission_to_take_photos_or_video))
+                 .onAllGranted(() -> startActivity(MediaSendActivity.buildCameraFirstIntent(requireActivity())))
+                 .onAnyDenied(() -> Toast.makeText(requireContext(), R.string.ConversationActivity_signal_needs_camera_permissions_to_take_photos_or_video, Toast.LENGTH_LONG).show())
+                 .execute();
+    });
     initializeListAdapter();
+    initializeTypingObserver();
   }
 
   @Override
@@ -162,6 +194,7 @@ public class ConversationListFragment extends Fragment
     super.onPause();
 
     fab.stopPulse();
+    cameraFab.stopPulse();
     EventBus.getDefault().unregister(this);
   }
 
@@ -190,6 +223,9 @@ public class ConversationListFragment extends Fragment
           return Optional.of(new UnauthorizedReminder(context));
         } else if (ExpiredBuildReminder.isEligible()) {
           return Optional.of(new ExpiredBuildReminder(context));
+        } else if (ServiceOutageReminder.isEligible(context)) {
+          ApplicationContext.getInstance(context).getJobManager().add(new ServiceOutageDetectionJob());
+          return Optional.of(new ServiceOutageReminder(context));
         } else if (OutdatedBuildReminder.isEligible()) {
           return Optional.of(new OutdatedBuildReminder(context));
         } else if (DefaultSmsReminder.isEligible(context)) {
@@ -221,6 +257,16 @@ public class ConversationListFragment extends Fragment
   private void initializeListAdapter() {
     list.setAdapter(new ConversationListAdapter(getActivity(), GlideApp.with(this), locale, null, this));
     getLoaderManager().restartLoader(0, null, this);
+  }
+
+  private void initializeTypingObserver() {
+    ApplicationContext.getInstance(requireContext()).getTypingStatusRepository().getTypingThreads().observe(this, threadIds -> {
+      if (threadIds == null) {
+        threadIds = Collections.emptySet();
+      }
+
+      getListAdapter().setTypingThreads(threadIds);
+    });
   }
 
   @SuppressLint("StaticFieldLeak")
@@ -322,8 +368,7 @@ public class ConversationListFragment extends Fragment
 
   private void handleSelectAllThreads() {
     getListAdapter().selectAllThreads();
-    actionMode.setSubtitle(getString(R.string.conversation_fragment_cab__batch_selection_amount,
-                                     String.valueOf(getListAdapter().getBatchSelections().size())));
+    actionMode.setTitle(String.valueOf(getListAdapter().getBatchSelections().size()));
   }
 
   private void handleCreateConversation(long threadId, Recipient recipient, int distributionType, long lastSeen) {
@@ -331,17 +376,19 @@ public class ConversationListFragment extends Fragment
   }
 
   @Override
-  public Loader<Cursor> onCreateLoader(int arg0, Bundle arg1) {
+  public @NonNull Loader<Cursor> onCreateLoader(int arg0, Bundle arg1) {
     return new ConversationListLoader(getActivity(), queryFilter, archive);
   }
 
   @Override
-  public void onLoadFinished(Loader<Cursor> arg0, Cursor cursor) {
+  public void onLoadFinished(@NonNull Loader<Cursor> arg0, Cursor cursor) {
     if ((cursor == null || cursor.getCount() <= 0) && TextUtils.isEmpty(queryFilter) && !archive) {
       list.setVisibility(View.INVISIBLE);
       emptyState.setVisibility(View.VISIBLE);
       emptySearch.setVisibility(View.INVISIBLE);
+      emptyImage.setImageResource(EMPTY_IMAGES[(int) (Math.random() * EMPTY_IMAGES.length)]);
       fab.startPulse(3 * 1000);
+      cameraFab.startPulse(3 * 1000);
     } else if ((cursor == null || cursor.getCount() <= 0) && !TextUtils.isEmpty(queryFilter)) {
       list.setVisibility(View.INVISIBLE);
       emptyState.setVisibility(View.GONE);
@@ -352,13 +399,14 @@ public class ConversationListFragment extends Fragment
       emptyState.setVisibility(View.GONE);
       emptySearch.setVisibility(View.INVISIBLE);
       fab.stopPulse();
+      cameraFab.stopPulse();
     }
 
     getListAdapter().changeCursor(cursor);
   }
 
   @Override
-  public void onLoaderReset(Loader<Cursor> arg0) {
+  public void onLoaderReset(@NonNull Loader<Cursor> arg0) {
     getListAdapter().changeCursor(null);
   }
 
@@ -374,8 +422,7 @@ public class ConversationListFragment extends Fragment
       if (adapter.getBatchSelections().size() == 0) {
         actionMode.finish();
       } else {
-        actionMode.setSubtitle(getString(R.string.conversation_fragment_cab__batch_selection_amount,
-                                         String.valueOf(adapter.getBatchSelections().size())));
+        actionMode.setTitle(String.valueOf(getListAdapter().getBatchSelections().size()));
       }
 
       adapter.notifyDataSetChanged();
@@ -410,8 +457,7 @@ public class ConversationListFragment extends Fragment
 
     inflater.inflate(R.menu.conversation_list_batch, menu);
 
-    mode.setTitle(R.string.conversation_fragment_cab__batch_selection_mode);
-    mode.setSubtitle(getString(R.string.conversation_fragment_cab__batch_selection_amount, "1"));
+    mode.setTitle("1");
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
       getActivity().getWindow().setStatusBarColor(getResources().getColor(R.color.action_mode_status_bar));
@@ -461,15 +507,15 @@ public class ConversationListFragment extends Fragment
     }
 
     @Override
-    public boolean onMove(RecyclerView recyclerView,
-                          RecyclerView.ViewHolder viewHolder,
-                          RecyclerView.ViewHolder target)
+    public boolean onMove(@NonNull RecyclerView recyclerView,
+                          @NonNull RecyclerView.ViewHolder viewHolder,
+                          @NonNull RecyclerView.ViewHolder target)
     {
       return false;
     }
 
     @Override
-    public int getSwipeDirs(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
+    public int getSwipeDirs(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
       if (viewHolder.itemView instanceof ConversationListItemAction) {
         return 0;
       }
@@ -483,7 +529,8 @@ public class ConversationListFragment extends Fragment
 
     @SuppressLint("StaticFieldLeak")
     @Override
-    public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+    public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+      if (viewHolder.itemView instanceof ConversationListItemInboxZero) return;
       final long threadId    = ((ConversationListItem)viewHolder.itemView).getThreadId();
       final int  unreadCount = ((ConversationListItem)viewHolder.itemView).getUnreadCount();
 
@@ -536,11 +583,12 @@ public class ConversationListFragment extends Fragment
     }
 
     @Override
-    public void onChildDraw(Canvas c, RecyclerView recyclerView,
-                            RecyclerView.ViewHolder viewHolder,
+    public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView,
+                            @NonNull RecyclerView.ViewHolder viewHolder,
                             float dX, float dY, int actionState,
                             boolean isCurrentlyActive)
     {
+      if (viewHolder.itemView instanceof ConversationListItemInboxZero) return;
       if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
         View  itemView = viewHolder.itemView;
         Paint p        = new Paint();
@@ -571,63 +619,6 @@ public class ConversationListFragment extends Fragment
       }
     }
   }
-
-  private static class InsetDividerItemDecoration extends RecyclerView.ItemDecoration {
-
-    private Drawable divider;
-    private final Rect bounds = new Rect();
-    
-    InsetDividerItemDecoration(Context context) {
-      TypedArray typedArray = context.obtainStyledAttributes(new int[]{R.attr.conversation_list_item_divider});
-      this.divider = typedArray.getDrawable(0);
-      typedArray.recycle();
-    }
-
-    @Override
-    public void onDraw(Canvas canvas, RecyclerView parent, RecyclerView.State state) {
-      if (parent.getLayoutManager() == null) {
-        return;
-      }
-
-      canvas.save();
-
-      final int left;
-      final int right;
-
-      if (parent.getClipToPadding()) {
-        left  = parent.getPaddingLeft();
-        right = parent.getWidth() - parent.getPaddingRight();
-        canvas.clipRect(left, parent.getPaddingTop(), right, parent.getHeight() - parent.getPaddingBottom());
-      } else {
-        left = 0;
-        right = parent.getWidth();
-      }
-
-      final int childCount = parent.getChildCount();
-
-      for (int i = 0; i < childCount-1; i++) {
-        final View child = parent.getChildAt(i);
-        parent.getDecoratedBoundsWithMargins(child, bounds);
-        final int bottom = bounds.bottom + Math.round(child.getTranslationY());
-        final int top = bottom - divider.getIntrinsicHeight();
-        divider.setBounds(left, top, right, bottom);
-        divider.draw(canvas);
-      }
-
-      canvas.restore();
-    }
-
-    @Override
-    public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
-      if (divider == null) {
-        outRect.set(0, 0, 0, 0);
-        return;
-      }
-
-      outRect.set(0, 0, 0, divider.getIntrinsicHeight());
-    }
-  }
-
 }
 
 

@@ -4,15 +4,15 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.preference.DialogPreference;
-import android.support.v7.preference.PreferenceDialogFragmentCompat;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.DialogPreference;
+import androidx.preference.PreferenceDialogFragmentCompat;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -122,7 +122,7 @@ public class CustomDefaultPreference extends DialogPreference {
 
     @Override
     protected void onBindDialogView(@NonNull View view) {
-      Log.w(TAG, "onBindDialogView");
+      Log.i(TAG, "onBindDialogView");
       super.onBindDialogView(view);
 
       CustomDefaultPreference preference = (CustomDefaultPreference)getPreference();
@@ -140,7 +140,7 @@ public class CustomDefaultPreference extends DialogPreference {
 
 
     @Override
-    public Dialog onCreateDialog(Bundle instanceState) {
+    public @NonNull Dialog onCreateDialog(Bundle instanceState) {
       Dialog dialog = super.onCreateDialog(instanceState);
 
       CustomDefaultPreference preference = (CustomDefaultPreference)getPreference();

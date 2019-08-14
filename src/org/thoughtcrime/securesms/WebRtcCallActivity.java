@@ -24,11 +24,11 @@ import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.media.AudioManager;
-import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AlertDialog;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -42,13 +42,12 @@ import org.thoughtcrime.securesms.components.webrtc.WebRtcCallScreen;
 import org.thoughtcrime.securesms.crypto.storage.TextSecureIdentityKeyStore;
 import org.thoughtcrime.securesms.events.WebRtcViewModel;
 import org.thoughtcrime.securesms.permissions.Permissions;
-import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.service.MessageRetrievalService;
 import org.thoughtcrime.securesms.service.WebRtcCallService;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.ViewUtil;
+import org.thoughtcrime.securesms.webrtc.CallNotificationBuilder;
 import org.whispersystems.libsignal.IdentityKey;
 import org.whispersystems.libsignal.SignalProtocolAddress;
 
@@ -66,11 +65,10 @@ public class WebRtcCallActivity extends Activity {
   public static final String END_CALL_ACTION = WebRtcCallActivity.class.getCanonicalName() + ".END_CALL_ACTION";
 
   private WebRtcCallScreen           callScreen;
-  private SignalServiceNetworkAccess networkAccess;
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
-    Log.w(TAG, "onCreate()");
+    Log.i(TAG, "onCreate()");
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     super.onCreate(savedInstanceState);
@@ -81,35 +79,29 @@ public class WebRtcCallActivity extends Activity {
     setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
 
     initializeResources();
+
+    processIntent(getIntent());
   }
 
 
   @Override
   public void onResume() {
-    Log.w(TAG, "onResume()");
+    Log.i(TAG, "onResume()");
     super.onResume();
-    if (!networkAccess.isCensored(this)) MessageRetrievalService.registerActivityStarted(this);
     initializeScreenshotSecurity();
     EventBus.getDefault().register(this);
   }
 
   @Override
   public void onNewIntent(Intent intent){
-    Log.w(TAG, "onNewIntent");
-    if (ANSWER_ACTION.equals(intent.getAction())) {
-      handleAnswerCall();
-    } else if (DENY_ACTION.equals(intent.getAction())) {
-      handleDenyCall();
-    } else if (END_CALL_ACTION.equals(intent.getAction())) {
-      handleEndCall();
-    }
+    Log.i(TAG, "onNewIntent");
+    processIntent(intent);
   }
 
   @Override
   public void onPause() {
-    Log.w(TAG, "onPause");
+    Log.i(TAG, "onPause");
     super.onPause();
-    if (!networkAccess.isCensored(this)) MessageRetrievalService.registerActivityStopped(this);
     EventBus.getDefault().unregister(this);
   }
 
@@ -123,10 +115,18 @@ public class WebRtcCallActivity extends Activity {
     Permissions.onRequestPermissionsResult(this, requestCode, permissions, grantResults);
   }
 
+  private void processIntent(@NonNull Intent intent) {
+    if (ANSWER_ACTION.equals(intent.getAction())) {
+      handleAnswerCall();
+    } else if (DENY_ACTION.equals(intent.getAction())) {
+      handleDenyCall();
+    } else if (END_CALL_ACTION.equals(intent.getAction())) {
+      handleEndCall();
+    }
+  }
+
   private void initializeScreenshotSecurity() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH &&
-        TextSecurePreferences.isScreenSecurityEnabled(this))
-    {
+    if (TextSecurePreferences.isScreenSecurityEnabled(this)) {
       getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
     } else {
       getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -139,10 +139,9 @@ public class WebRtcCallActivity extends Activity {
     callScreen.setIncomingCallActionListener(new IncomingCallActionListener());
     callScreen.setAudioMuteButtonListener(new AudioMuteButtonListener());
     callScreen.setVideoMuteButtonListener(new VideoMuteButtonListener());
+    callScreen.setCameraFlipButtonListener(new CameraFlipButtonListener());
     callScreen.setSpeakerButtonListener(new SpeakerButtonListener());
     callScreen.setBluetoothButtonListener(new BluetoothButtonListener());
-
-    networkAccess = new SignalServiceNetworkAccess(this);
   }
 
   private void handleSetMuteAudio(boolean enabled) {
@@ -156,6 +155,12 @@ public class WebRtcCallActivity extends Activity {
     Intent intent = new Intent(this, WebRtcCallService.class);
     intent.setAction(WebRtcCallService.ACTION_SET_MUTE_VIDEO);
     intent.putExtra(WebRtcCallService.EXTRA_MUTE, muted);
+    startService(intent);
+  }
+
+  private void handleFlipCamera() {
+    Intent intent = new Intent(this, WebRtcCallService.class);
+    intent.setAction(WebRtcCallService.ACTION_FLIP_CAMERA);
     startService(intent);
   }
 
@@ -195,7 +200,7 @@ public class WebRtcCallActivity extends Activity {
   }
 
   private void handleEndCall() {
-    Log.w(TAG, "Hangup pressed, handling termination now...");
+    Log.i(TAG, "Hangup pressed, handling termination now...");
     Intent intent = new Intent(WebRtcCallActivity.this, WebRtcCallService.class);
     intent.setAction(WebRtcCallService.ACTION_LOCAL_HANGUP);
     startService(intent);
@@ -210,7 +215,7 @@ public class WebRtcCallActivity extends Activity {
   }
 
   private void handleTerminate(@NonNull Recipient recipient /*, int terminationType */) {
-    Log.w(TAG, "handleTerminate called");
+    Log.i(TAG, "handleTerminate called");
 
     callScreen.setActiveCall(recipient, getString(R.string.RedPhone_ending_call));
     EventBus.getDefault().removeStickyEvent(WebRtcViewModel.class);
@@ -230,7 +235,7 @@ public class WebRtcCallActivity extends Activity {
 
   private void handleCallConnected(@NonNull WebRtcViewModel event) {
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_IGNORE_CHEEK_PRESSES);
-    callScreen.setActiveCall(event.getRecipient(), getString(R.string.RedPhone_connected), "");
+    callScreen.setActiveCall(event.getRecipient(), getString(R.string.RedPhone_connected), "", event.getLocalRenderer(), event.getRemoteRenderer());
   }
 
   private void handleRecipientUnavailable(@NonNull WebRtcViewModel event) {
@@ -307,7 +312,7 @@ public class WebRtcCallActivity extends Activity {
 
   @Subscribe(sticky = true, threadMode = ThreadMode.MAIN)
   public void onEventMainThread(final WebRtcViewModel event) {
-    Log.w(TAG, "Got message from service: " + event);
+    Log.i(TAG, "Got message from service: " + event);
 
     switch (event.getState()) {
       case CALL_CONNECTED:          handleCallConnected(event);            break;
@@ -322,10 +327,10 @@ public class WebRtcCallActivity extends Activity {
       case UNTRUSTED_IDENTITY:      handleUntrustedIdentity(event);        break;
     }
 
-    callScreen.setLocalVideoEnabled(event.isLocalVideoEnabled());
     callScreen.setRemoteVideoEnabled(event.isRemoteVideoEnabled());
     callScreen.updateAudioState(event.isBluetoothAvailable(), event.isMicrophoneEnabled());
     callScreen.setControlsEnabled(event.getState() != WebRtcViewModel.State.CALL_INCOMING);
+    callScreen.setLocalVideoState(event.getLocalCameraState());
   }
 
   private class HangupButtonListener implements WebRtcCallScreen.HangupButtonListener {
@@ -345,6 +350,13 @@ public class WebRtcCallActivity extends Activity {
     @Override
     public void onToggle(boolean isMuted) {
       WebRtcCallActivity.this.handleSetMuteVideo(isMuted);
+    }
+  }
+
+  private class CameraFlipButtonListener implements WebRtcCallControls.CameraFlipButtonListener {
+    @Override
+    public void onToggle() {
+      WebRtcCallActivity.this.handleFlipCamera();
     }
   }
 

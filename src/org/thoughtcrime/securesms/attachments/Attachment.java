@@ -1,10 +1,11 @@
 package org.thoughtcrime.securesms.attachments;
 
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
+import org.thoughtcrime.securesms.stickers.StickerLocator;
 
 public abstract class Attachment {
 
@@ -32,10 +33,21 @@ public abstract class Attachment {
   private final String fastPreflightId;
 
   private final boolean voiceNote;
+  private final int width;
+  private final int height;
+
+  private final boolean quote;
+
+  @Nullable
+  private final String caption;
+
+  @Nullable
+  private final StickerLocator stickerLocator;
 
   public Attachment(@NonNull String contentType, int transferState, long size, @Nullable String fileName,
                     @Nullable String location, @Nullable String key, @Nullable String relay,
-                    @Nullable byte[] digest, @Nullable String fastPreflightId, boolean voiceNote)
+                    @Nullable byte[] digest, @Nullable String fastPreflightId, boolean voiceNote,
+                    int width, int height, boolean quote, @Nullable String caption, @Nullable StickerLocator stickerLocator)
   {
     this.contentType     = contentType;
     this.transferState   = transferState;
@@ -47,6 +59,11 @@ public abstract class Attachment {
     this.digest          = digest;
     this.fastPreflightId = fastPreflightId;
     this.voiceNote       = voiceNote;
+    this.width           = width;
+    this.height          = height;
+    this.quote           = quote;
+    this.stickerLocator  = stickerLocator;
+    this.caption         = caption;
   }
 
   @Nullable
@@ -105,5 +122,29 @@ public abstract class Attachment {
 
   public boolean isVoiceNote() {
     return voiceNote;
+  }
+
+  public int getWidth() {
+    return width;
+  }
+
+  public int getHeight() {
+    return height;
+  }
+
+  public boolean isQuote() {
+    return quote;
+  }
+
+  public boolean isSticker() {
+    return stickerLocator != null;
+  }
+
+  public @Nullable StickerLocator getSticker() {
+    return stickerLocator;
+  }
+
+  public @Nullable String getCaption() {
+    return caption;
   }
 }

@@ -2,7 +2,7 @@ package org.thoughtcrime.securesms.push;
 
 import android.content.Context;
 import android.os.AsyncTask;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 
 import com.google.android.gms.security.ProviderInstaller;
 
@@ -12,7 +12,7 @@ import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 
 public class AccountManagerFactory {
 
-  private static final String TAG = AccountManagerFactory.class.getName();
+  private static final String TAG = AccountManagerFactory.class.getSimpleName();
 
   public static SignalServiceAccountManager createManager(Context context) {
     return new SignalServiceAccountManager(new SignalServiceNetworkAccess(context).getConfiguration(context),

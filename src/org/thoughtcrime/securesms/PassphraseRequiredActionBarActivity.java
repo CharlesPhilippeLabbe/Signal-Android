@@ -5,17 +5,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
-import android.support.annotation.IdRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
-import android.util.Log;
+import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+import org.thoughtcrime.securesms.logging.Log;
 
 import org.thoughtcrime.securesms.crypto.MasterSecretUtil;
 import org.thoughtcrime.securesms.jobs.PushNotificationReceiveJob;
 import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
+import org.thoughtcrime.securesms.registration.WelcomeActivity;
 import org.thoughtcrime.securesms.service.KeyCachingService;
-import org.thoughtcrime.securesms.service.MessageRetrievalService;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 
 import java.util.Locale;
@@ -31,14 +31,14 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
   private static final int STATE_UPGRADE_DATABASE         = 3;
   private static final int STATE_PROMPT_PUSH_REGISTRATION = 4;
   private static final int STATE_EXPERIENCE_UPGRADE       = 5;
+  private static final int STATE_WELCOME_SCREEN           = 6;
 
   private SignalServiceNetworkAccess networkAccess;
   private BroadcastReceiver          clearKeyReceiver;
-  private boolean                    isVisible;
 
   @Override
   protected final void onCreate(Bundle savedInstanceState) {
-    Log.w(TAG, "onCreate(" + savedInstanceState + ")");
+    Log.i(TAG, "onCreate(" + savedInstanceState + ")");
     this.networkAccess = new SignalServiceNetworkAccess(this);
     onPreCreate();
 
@@ -58,39 +58,32 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
 
   @Override
   protected void onResume() {
-    Log.w(TAG, "onResume()");
+    Log.i(TAG, "onResume()");
     super.onResume();
-    KeyCachingService.registerPassphraseActivityStarted(this);
 
-    if (!networkAccess.isCensored(this)) MessageRetrievalService.registerActivityStarted(this);
-    else                                 ApplicationContext.getInstance(this).getJobManager().add(new PushNotificationReceiveJob(this));
-
-    isVisible = true;
+    if (networkAccess.isCensored(this)) {
+      ApplicationContext.getInstance(this).getJobManager().add(new PushNotificationReceiveJob(this));
+    }
   }
 
   @Override
   protected void onPause() {
-    Log.w(TAG, "onPause()");
+    Log.i(TAG, "onPause()");
     super.onPause();
-    KeyCachingService.registerPassphraseActivityStopped(this);
-
-    if (!networkAccess.isCensored(this)) MessageRetrievalService.registerActivityStopped(this);
-
-    isVisible = false;
   }
 
   @Override
   protected void onDestroy() {
-    Log.w(TAG, "onDestroy()");
+    Log.i(TAG, "onDestroy()");
     super.onDestroy();
     removeClearKeyReceiver(this);
   }
 
   @Override
   public void onMasterSecretCleared() {
-    Log.w(TAG, "onMasterSecretCleared()");
-    if (isVisible) routeApplicationState(false);
-    else           finish();
+    Log.i(TAG, "onMasterSecretCleared()");
+    if (ApplicationContext.getInstance(this).isAppVisible()) routeApplicationState(true);
+    else                                                     finish();
   }
 
   protected <T extends Fragment> T initFragment(@IdRes int target,
@@ -134,12 +127,13 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
   }
 
   private Intent getIntentForState(int state) {
-    Log.w(TAG, "routeApplicationState(), state: " + state);
+    Log.i(TAG, "routeApplicationState(), state: " + state);
 
     switch (state) {
     case STATE_CREATE_PASSPHRASE:        return getCreatePassphraseIntent();
     case STATE_PROMPT_PASSPHRASE:        return getPromptPassphraseIntent();
     case STATE_UPGRADE_DATABASE:         return getUpgradeDatabaseIntent();
+    case STATE_WELCOME_SCREEN:           return getWelcomeIntent();
     case STATE_PROMPT_PUSH_REGISTRATION: return getPushRegistrationIntent();
     case STATE_EXPERIENCE_UPGRADE:       return getExperienceUpgradeIntent();
     default:                             return null;
@@ -153,6 +147,8 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
       return STATE_PROMPT_PASSPHRASE;
     } else if (DatabaseUpgradeActivity.isUpdate(this)) {
       return STATE_UPGRADE_DATABASE;
+    } else if (!TextSecurePreferences.hasSeenWelcomeScreen(this)) {
+      return STATE_WELCOME_SCREEN;
     } else if (!TextSecurePreferences.hasPromptedPushRegistration(this)) {
       return STATE_PROMPT_PUSH_REGISTRATION;
     } else if (ExperienceUpgradeActivity.isUpdate(this)) {
@@ -181,6 +177,10 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
     return getRoutedIntent(ExperienceUpgradeActivity.class, getIntent());
   }
 
+  private Intent getWelcomeIntent() {
+    return getRoutedIntent(WelcomeActivity.class, getPushRegistrationIntent());
+  }
+
   private Intent getPushRegistrationIntent() {
     return getRoutedIntent(RegistrationActivity.class, getCreateProfileIntent());
   }
@@ -200,11 +200,11 @@ public abstract class PassphraseRequiredActionBarActivity extends BaseActionBarA
   }
 
   private void initializeClearKeyReceiver() {
-    Log.w(TAG, "initializeClearKeyReceiver()");
+    Log.i(TAG, "initializeClearKeyReceiver()");
     this.clearKeyReceiver = new BroadcastReceiver() {
       @Override
       public void onReceive(Context context, Intent intent) {
-        Log.w(TAG, "onReceive() for clear key event");
+        Log.i(TAG, "onReceive() for clear key event");
         onMasterSecretCleared();
       }
     };

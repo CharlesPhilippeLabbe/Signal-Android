@@ -10,9 +10,9 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.provider.ContactsContract;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.i18n.phonenumbers.NumberParseException;
@@ -180,10 +180,10 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
 
       Cursor smsCursor = null;
 
-      Log.w("DatabaseFactory", "Upgrade count: " + (smsCount + threadCount));
+      Log.i("DatabaseFactory", "Upgrade count: " + (smsCount + threadCount));
 
       do {
-        Log.w("DatabaseFactory", "Looping SMS cursor...");
+        Log.i("DatabaseFactory", "Looping SMS cursor...");
         if (smsCursor != null)
           smsCursor.close();
 
@@ -235,7 +235,7 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
       skip                = 0;
 
       do {
-        Log.w("DatabaseFactory", "Looping thread cursor...");
+        Log.i("DatabaseFactory", "Looping thread cursor...");
 
         if (threadCursor != null)
           threadCursor.close();
@@ -294,13 +294,13 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
     }
 
     if (fromVersion < DatabaseUpgradeActivity.MMS_BODY_VERSION) {
-      Log.w("DatabaseFactory", "Update MMS bodies...");
+      Log.i("DatabaseFactory", "Update MMS bodies...");
       MasterCipher masterCipher = new MasterCipher(masterSecret);
       Cursor mmsCursor          = db.query("mms", new String[] {"_id"},
                                            "msg_box & " + 0x80000000L + " != 0",
                                            null, null, null, null);
 
-      Log.w("DatabaseFactory", "Got MMS rows: " + (mmsCursor == null ? "null" : mmsCursor.getCount()));
+      Log.i("DatabaseFactory", "Got MMS rows: " + (mmsCursor == null ? "null" : mmsCursor.getCount()));
 
       while (mmsCursor != null && mmsCursor.moveToNext()) {
         listener.setProgress(mmsCursor.getPosition(), mmsCursor.getCount());
@@ -353,7 +353,7 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
                      new String[] {partCount+"", mmsId+""});
         }
 
-        Log.w("DatabaseFactory", "Updated body: " + body + " and part_count: " + partCount);
+        Log.i("DatabaseFactory", "Updated body: " + body + " and part_count: " + partCount);
       }
     }
 

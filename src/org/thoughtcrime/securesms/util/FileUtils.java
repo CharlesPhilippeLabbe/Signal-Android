@@ -1,18 +1,21 @@
 package org.thoughtcrime.securesms.util;
 
+import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-public class FileUtils {
+public final class FileUtils {
 
   static {
     System.loadLibrary("native-utils");
   }
 
   public static native int getFileDescriptorOwner(FileDescriptor fileDescriptor);
+
+  static native int createMemoryFileDescriptor(String name);
 
   public static byte[] getFileDigest(FileInputStream fin) throws IOException {
     try {
@@ -29,5 +32,28 @@ public class FileUtils {
     } catch (NoSuchAlgorithmException e) {
       throw new AssertionError(e);
     }
+  }
+
+  public static void deleteDirectoryContents(File directory) throws IOException {
+    if (directory == null || !directory.exists() || !directory.isDirectory()) return;
+
+    File[] files = directory.listFiles();
+
+    if (files != null) {
+      for (File file : files) {
+        if (file.isDirectory()) deleteDirectory(file);
+        else                    file.delete();
+      }
+    }
+  }
+
+  public static void deleteDirectory(File directory) throws IOException {
+    if (directory == null || !directory.exists() || !directory.isDirectory()) {
+      return;
+    }
+
+    deleteDirectoryContents(directory);
+
+    directory.delete();
   }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (C) 2013 Open Whisper Systems
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,25 +17,30 @@
 package org.thoughtcrime.securesms.contacts;
 
 import android.accounts.Account;
+import android.annotation.SuppressLint;
 import android.content.ContentProviderOperation;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.OperationApplicationException;
 import android.database.Cursor;
 import android.database.CursorWrapper;
+import android.database.MatrixCursor;
+import android.database.MergeCursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.RemoteException;
 import android.provider.BaseColumns;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.RawContacts;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
 import android.util.Pair;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
 
@@ -76,53 +81,77 @@ public class ContactsDatabase {
     this.context  = context;
   }
 
+  public synchronized  void removeDeletedRawContacts(@NonNull Account account) {
+    Uri currentContactsUri = RawContacts.CONTENT_URI.buildUpon()
+                                                    .appendQueryParameter(RawContacts.ACCOUNT_NAME, account.name)
+                                                    .appendQueryParameter(RawContacts.ACCOUNT_TYPE, account.type)
+                                                    .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                                                    .build();
+
+    String[] projection = new String[] {BaseColumns._ID, RawContacts.SYNC1};
+
+    try (Cursor cursor = context.getContentResolver().query(currentContactsUri, projection, RawContacts.DELETED + " = ?", new String[] {"1"}, null)) {
+      while (cursor != null && cursor.moveToNext()) {
+        long rawContactId = cursor.getLong(0);
+        Log.i(TAG, "Deleting raw contact: " + cursor.getString(1) + ", " + rawContactId);
+
+        context.getContentResolver().delete(currentContactsUri, RawContacts._ID + " = ?", new String[] {String.valueOf(rawContactId)});
+      }
+    }
+  }
+
   public synchronized void setRegisteredUsers(@NonNull Account account,
                                               @NonNull List<Address> registeredAddressList,
                                               boolean remove)
       throws RemoteException, OperationApplicationException
   {
-    Set<Address>                        registeredAddressSet = new HashSet<>();
+    Set<Address>                        registeredAddressSet = new HashSet<>(registeredAddressList);
     ArrayList<ContentProviderOperation> operations           = new ArrayList<>();
     Map<Address, SignalContact>         currentContacts      = getSignalRawContacts(account);
+    List<List<Address>>                 registeredChunks     = Util.chunk(registeredAddressList, 50);
 
-    for (Address registeredAddress : registeredAddressList) {
-      registeredAddressSet.add(registeredAddress);
+    for (List<Address> registeredChunk : registeredChunks) {
+      for (Address registeredAddress : registeredChunk) {
+        if (!currentContacts.containsKey(registeredAddress)) {
+          Optional<SystemContactInfo> systemContactInfo = getSystemContactInfo(registeredAddress);
 
-      if (!currentContacts.containsKey(registeredAddress)) {
-        Optional<SystemContactInfo> systemContactInfo = getSystemContactInfo(registeredAddress);
-
-        if (systemContactInfo.isPresent()) {
-          Log.w(TAG, "Adding number: " + registeredAddress);
-          addTextSecureRawContact(operations, account, systemContactInfo.get().number,
-                                  systemContactInfo.get().name, systemContactInfo.get().id,
-                                  true);
+          if (systemContactInfo.isPresent()) {
+            Log.i(TAG, "Adding number: " + registeredAddress);
+            addTextSecureRawContact(operations, account, systemContactInfo.get().number,
+                                    systemContactInfo.get().name, systemContactInfo.get().id);
+          }
         }
+      }
+      if (!operations.isEmpty()) {
+        context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, operations);
+        operations.clear();
       }
     }
 
     for (Map.Entry<Address, SignalContact> currentContactEntry : currentContacts.entrySet()) {
       if (!registeredAddressSet.contains(currentContactEntry.getKey())) {
         if (remove) {
-          Log.w(TAG, "Removing number: " + currentContactEntry.getKey());
+          Log.i(TAG, "Removing number: " + currentContactEntry.getKey());
           removeTextSecureRawContact(operations, account, currentContactEntry.getValue().getId());
         }
       } else if (!currentContactEntry.getValue().isVoiceSupported()) {
-        Log.w(TAG, "Adding voice support: " + currentContactEntry.getKey());
+        Log.i(TAG, "Adding voice support: " + currentContactEntry.getKey());
         addContactVoiceSupport(operations, currentContactEntry.getKey(), currentContactEntry.getValue().getId());
       } else if (!Util.isStringEquals(currentContactEntry.getValue().getRawDisplayName(),
                                       currentContactEntry.getValue().getAggregateDisplayName()))
       {
-        Log.w(TAG, "Updating display name: " + currentContactEntry.getKey());
+        Log.i(TAG, "Updating display name: " + currentContactEntry.getKey());
         updateDisplayName(operations, currentContactEntry.getValue().getAggregateDisplayName(), currentContactEntry.getValue().getId(), currentContactEntry.getValue().getDisplayNameSource());
       }
     }
 
     if (!operations.isEmpty()) {
-      context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, operations);
+      applyOperationsInBatches(context.getContentResolver(), ContactsContract.AUTHORITY, operations, 50);
     }
   }
 
-  @NonNull Cursor querySystemContacts(@Nullable String filter) {
+  @SuppressLint("Recycle")
+  public @NonNull Cursor querySystemContacts(@Nullable String filter) {
     Uri uri;
 
     if (!TextUtils.isEmpty(filter)) {
@@ -166,11 +195,11 @@ public class ContactsDatabase {
       cursor = context.getContentResolver().query(uri, projection, fallbackSelection, null, sort);
     }
 
-    return new ProjectionMappingCursor(cursor, projectionMap,
-                                       new Pair<String, Object>(CONTACT_TYPE_COLUMN, NORMAL_TYPE));
+    return new ProjectionMappingCursor(cursor, projectionMap, new Pair<>(CONTACT_TYPE_COLUMN, NORMAL_TYPE));
   }
 
-  @NonNull Cursor queryTextSecureContacts(String filter) {
+  @SuppressLint("Recycle")
+  public @NonNull Cursor queryTextSecureContacts(String filter) {
     String[] projection = new String[] {ContactsContract.Contacts.DISPLAY_NAME,
                                         ContactsContract.Data.DATA1};
 
@@ -196,14 +225,141 @@ public class ContactsDatabase {
                                                   new String[] {CONTACT_MIMETYPE,
                                                                 "%" + filter + "%", "%" + filter + "%"},
                                                   sort);
+
+      if (context.getString(R.string.note_to_self).toLowerCase().contains(filter.toLowerCase())) {
+        Optional<SystemContactInfo> self      = getSystemContactInfo(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)));
+        boolean                     shouldAdd = true;
+
+        if (self.isPresent()) {
+          boolean nameMatch   = self.get().name != null && self.get().name.toLowerCase().contains(filter.toLowerCase());
+          boolean numberMatch = self.get().number != null && self.get().number.contains(filter);
+
+          shouldAdd = !nameMatch && !numberMatch;
+        }
+
+        if (shouldAdd) {
+          MatrixCursor selfCursor = new MatrixCursor(projection);
+          selfCursor.addRow(new Object[]{ context.getString(R.string.note_to_self), TextSecurePreferences.getLocalNumber(context)});
+
+          cursor = cursor == null ? selfCursor : new MergeCursor(new Cursor[]{ cursor, selfCursor });
+        }
+      }
     }
 
     return new ProjectionMappingCursor(cursor, projectionMap,
-                                       new Pair<String, Object>(LABEL_COLUMN, "TextSecure"),
-                                       new Pair<String, Object>(NUMBER_TYPE_COLUMN, 0),
-                                       new Pair<String, Object>(CONTACT_TYPE_COLUMN, PUSH_TYPE));
+                                       new Pair<>(LABEL_COLUMN, "TextSecure"),
+                                       new Pair<>(NUMBER_TYPE_COLUMN, 0),
+                                       new Pair<>(CONTACT_TYPE_COLUMN, PUSH_TYPE));
 
   }
+
+  public @Nullable Cursor getNameDetails(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME,
+                                         ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME,
+                                         ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME,
+                                         ContactsContract.CommonDataKinds.StructuredName.PREFIX,
+                                         ContactsContract.CommonDataKinds.StructuredName.SUFFIX,
+                                         ContactsContract.CommonDataKinds.StructuredName.MIDDLE_NAME };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE };
+
+    return context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                                              projection,
+                                              selection,
+                                              args,
+                                              null);
+  }
+
+  public @Nullable String getOrganizationName(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.Organization.COMPANY };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE };
+
+    try (Cursor cursor = context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                                                            projection,
+                                                            selection,
+                                                            args,
+                                                            null))
+    {
+      if (cursor != null && cursor.moveToFirst()) {
+        return cursor.getString(0);
+      }
+    }
+
+    return null;
+  }
+
+  public @Nullable Cursor getPhoneDetails(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.Phone.NUMBER,
+                                         ContactsContract.CommonDataKinds.Phone.TYPE,
+                                         ContactsContract.CommonDataKinds.Phone.LABEL };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE };
+
+    return context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+        projection,
+        selection,
+        args,
+        null);
+  }
+
+  public @Nullable Cursor getEmailDetails(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.Email.ADDRESS,
+                                         ContactsContract.CommonDataKinds.Email.TYPE,
+                                         ContactsContract.CommonDataKinds.Email.LABEL };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE };
+
+    return context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                                              projection,
+                                              selection,
+                                              args,
+                                              null);
+  }
+
+  public @Nullable Cursor getPostalAddressDetails(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.StructuredPostal.TYPE,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.LABEL,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.STREET,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.POBOX,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.NEIGHBORHOOD,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.CITY,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.REGION,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.POSTCODE,
+                                         ContactsContract.CommonDataKinds.StructuredPostal.COUNTRY };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE };
+
+    return context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                                              projection,
+                                              selection,
+                                              args,
+                                              null);
+  }
+
+  public @Nullable Uri getAvatarUri(long contactId) {
+    String[] projection = new String[] { ContactsContract.CommonDataKinds.Photo.PHOTO_URI };
+    String   selection  = ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?";
+    String[] args       = new String[] { String.valueOf(contactId), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE };
+
+    try (Cursor cursor = context.getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                                                            projection,
+                                                            selection,
+                                                            args,
+                                                            null))
+    {
+      if (cursor != null && cursor.moveToFirst()) {
+        String uri = cursor.getString(0);
+        if (uri != null) {
+          return Uri.parse(uri);
+        }
+      }
+    }
+
+    return null;
+  }
+
+
 
   private void addContactVoiceSupport(List<ContentProviderOperation> operations,
                                       @NonNull Address address, long rawContactId)
@@ -247,22 +403,9 @@ public class ContactsDatabase {
     }
   }
 
-  private void removeContactVoiceSupport(List<ContentProviderOperation> operations, long rawContactId) {
-    operations.add(ContentProviderOperation.newUpdate(RawContacts.CONTENT_URI)
-                                           .withSelection(RawContacts._ID + " = ?", new String[] {String.valueOf(rawContactId)})
-                                           .withValue(RawContacts.SYNC4, "false")
-                                           .build());
-
-    operations.add(ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI.buildUpon().appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true").build())
-                                           .withSelection(ContactsContract.Data.RAW_CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
-                                                          new String[] {String.valueOf(rawContactId), CALL_MIMETYPE})
-                                           .withYieldAllowed(true)
-                                           .build());
-  }
-
   private void addTextSecureRawContact(List<ContentProviderOperation> operations,
                                        Account account, String e164number, String displayName,
-                                       long aggregateId, boolean supportsVoice)
+                                       long aggregateId)
   {
     int index   = operations.size();
     Uri dataUri = ContactsContract.Data.CONTENT_URI.buildUpon()
@@ -273,7 +416,7 @@ public class ContactsDatabase {
                                            .withValue(RawContacts.ACCOUNT_NAME, account.name)
                                            .withValue(RawContacts.ACCOUNT_TYPE, account.type)
                                            .withValue(RawContacts.SYNC1, e164number)
-                                           .withValue(RawContacts.SYNC4, String.valueOf(supportsVoice))
+                                           .withValue(RawContacts.SYNC4, String.valueOf(true))
                                            .build());
 
     operations.add(ContentProviderOperation.newInsert(dataUri)
@@ -299,25 +442,20 @@ public class ContactsDatabase {
                                            .withYieldAllowed(true)
                                            .build());
 
-    if (supportsVoice) {
-      operations.add(ContentProviderOperation.newInsert(dataUri)
-                                             .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, index)
-                                             .withValue(ContactsContract.Data.MIMETYPE, CALL_MIMETYPE)
-                                             .withValue(ContactsContract.Data.DATA1, e164number)
-                                             .withValue(ContactsContract.Data.DATA2, context.getString(R.string.app_name))
-                                             .withValue(ContactsContract.Data.DATA3, context.getString(R.string.ContactsDatabase_signal_call_s, e164number))
-                                             .withYieldAllowed(true)
-                                             .build());
-    }
+    operations.add(ContentProviderOperation.newInsert(dataUri)
+                                           .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, index)
+                                           .withValue(ContactsContract.Data.MIMETYPE, CALL_MIMETYPE)
+                                           .withValue(ContactsContract.Data.DATA1, e164number)
+                                           .withValue(ContactsContract.Data.DATA2, context.getString(R.string.app_name))
+                                           .withValue(ContactsContract.Data.DATA3, context.getString(R.string.ContactsDatabase_signal_call_s, e164number))
+                                           .withYieldAllowed(true)
+                                           .build());
 
-
-    if (Build.VERSION.SDK_INT >= 11) {
-      operations.add(ContentProviderOperation.newUpdate(ContactsContract.AggregationExceptions.CONTENT_URI)
-                                             .withValue(ContactsContract.AggregationExceptions.RAW_CONTACT_ID1, aggregateId)
-                                             .withValueBackReference(ContactsContract.AggregationExceptions.RAW_CONTACT_ID2, index)
-                                             .withValue(ContactsContract.AggregationExceptions.TYPE, ContactsContract.AggregationExceptions.TYPE_KEEP_TOGETHER)
-                                             .build());
-    }
+    operations.add(ContentProviderOperation.newUpdate(ContactsContract.AggregationExceptions.CONTENT_URI)
+                                           .withValue(ContactsContract.AggregationExceptions.RAW_CONTACT_ID1, aggregateId)
+                                           .withValueBackReference(ContactsContract.AggregationExceptions.RAW_CONTACT_ID2, index)
+                                           .withValue(ContactsContract.AggregationExceptions.TYPE, ContactsContract.AggregationExceptions.TYPE_KEEP_TOGETHER)
+                                           .build());
   }
 
   private void removeTextSecureRawContact(List<ContentProviderOperation> operations,
@@ -341,13 +479,7 @@ public class ContactsDatabase {
     Cursor                      cursor         = null;
 
     try {
-      String[] projection;
-
-      if (Build.VERSION.SDK_INT >= 11) {
-        projection = new String[] {BaseColumns._ID, RawContacts.SYNC1, RawContacts.SYNC4, RawContacts.CONTACT_ID, RawContacts.DISPLAY_NAME_PRIMARY, RawContacts.DISPLAY_NAME_SOURCE};
-      } else{
-        projection = new String[] {BaseColumns._ID, RawContacts.SYNC1, RawContacts.SYNC4, RawContacts.CONTACT_ID};
-      }
+      String[] projection = new String[] {BaseColumns._ID, RawContacts.SYNC1, RawContacts.SYNC4, RawContacts.CONTACT_ID, RawContacts.DISPLAY_NAME_PRIMARY, RawContacts.DISPLAY_NAME_SOURCE};
 
       cursor = context.getContentResolver().query(currentContactsUri, projection, null, null, null);
 
@@ -356,15 +488,9 @@ public class ContactsDatabase {
         long    rawContactId                = cursor.getLong(0);
         long    contactId                   = cursor.getLong(3);
         String  supportsVoice               = cursor.getString(2);
-        String  rawContactDisplayName       = null;
-        String  aggregateDisplayName        = null;
-        int     rawContactDisplayNameSource = 0;
-
-        if (Build.VERSION.SDK_INT >= 11) {
-          rawContactDisplayName       = cursor.getString(4);
-          rawContactDisplayNameSource = cursor.getInt(5);
-          aggregateDisplayName        = getDisplayName(contactId);
-        }
+        String  rawContactDisplayName       = cursor.getString(4);
+        String  aggregateDisplayName        = getDisplayName(contactId);
+        int     rawContactDisplayNameSource = cursor.getInt(5);
 
         signalContacts.put(currentAddress, new SignalContact(rawContactId, supportsVoice, rawContactDisplayName, aggregateDisplayName, rawContactDisplayNameSource));
       }
@@ -431,6 +557,18 @@ public class ContactsDatabase {
       }
     } finally {
       if (cursor != null) cursor.close();
+    }
+  }
+
+  private void applyOperationsInBatches(@NonNull ContentResolver contentResolver,
+                                        @NonNull String authority,
+                                        @NonNull List<ContentProviderOperation> operations,
+                                        int batchSize)
+      throws OperationApplicationException, RemoteException
+  {
+    List<List<ContentProviderOperation>> batches = Util.chunk(operations, batchSize);
+    for (List<ContentProviderOperation> batch : batches) {
+      contentResolver.applyBatch(authority, new ArrayList<>(batch));
     }
   }
 

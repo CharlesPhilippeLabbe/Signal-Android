@@ -29,26 +29,23 @@ import android.hardware.Camera.Size;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Build.VERSION;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.util.AttributeSet;
-import android.util.Log;
+import org.thoughtcrime.securesms.logging.Log;
 import android.view.OrientationEventListener;
 import android.view.ViewGroup;
+
+import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.util.BitmapUtil;
+import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Util;
+import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-
-import org.thoughtcrime.securesms.ApplicationContext;
-import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.util.BitmapUtil;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.Util;
-import org.whispersystems.jobqueue.Job;
-import org.whispersystems.jobqueue.JobParameters;
-import org.whispersystems.libsignal.util.guava.Optional;
 
 @SuppressWarnings("deprecation")
 public class CameraView extends ViewGroup {
@@ -97,7 +94,7 @@ public class CameraView extends ViewGroup {
   public void onResume() {
     if (state != State.PAUSED) return;
     state = State.RESUMED;
-    Log.w(TAG, "onResume() queued");
+    Log.i(TAG, "onResume() queued");
     enqueueTask(new SerialAsyncTask<Void>() {
       @Override
       protected
@@ -106,7 +103,7 @@ public class CameraView extends ViewGroup {
         try {
           long openStartMillis = System.currentTimeMillis();
           camera = Optional.fromNullable(Camera.open(cameraId));
-          Log.w(TAG, "camera.open() -> " + (System.currentTimeMillis() - openStartMillis) + "ms");
+          Log.i(TAG, "camera.open() -> " + (System.currentTimeMillis() - openStartMillis) + "ms");
           synchronized (CameraView.this) {
             CameraView.this.notifyAll();
           }
@@ -130,7 +127,7 @@ public class CameraView extends ViewGroup {
         if (getActivity().getRequestedOrientation() != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
           onOrientationChange.enable();
         }
-        Log.w(TAG, "onResume() completed");
+        Log.i(TAG, "onResume() completed");
       }
     });
   }
@@ -138,7 +135,7 @@ public class CameraView extends ViewGroup {
   public void onPause() {
     if (state == State.PAUSED) return;
     state = State.PAUSED;
-    Log.w(TAG, "onPause() queued");
+    Log.i(TAG, "onPause() queued");
 
     enqueueTask(new SerialAsyncTask<Void>() {
       private Optional<Camera> cameraToDestroy;
@@ -170,7 +167,7 @@ public class CameraView extends ViewGroup {
         outputOrientation = -1;
         removeView(surface);
         addView(surface);
-        Log.w(TAG, "onPause() completed");
+        Log.i(TAG, "onPause() completed");
       }
     });
 
@@ -220,7 +217,7 @@ public class CameraView extends ViewGroup {
 
   @Override
   protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-    Log.w(TAG, "onSizeChanged(" + oldw + "x" + oldh + " -> " + w + "x" + h + ")");
+    Log.i(TAG, "onSizeChanged(" + oldw + "x" + oldh + " -> " + w + "x" + h + ")");
     super.onSizeChanged(w, h, oldw, oldh);
     if (camera.isPresent()) startPreview(camera.get().getParameters());
   }
@@ -310,7 +307,7 @@ public class CameraView extends ViewGroup {
         final Size       preferredPreviewSize = getPreferredPreviewSize(parameters);
 
         if (preferredPreviewSize != null && !parameters.getPreviewSize().equals(preferredPreviewSize)) {
-          Log.w(TAG, "starting preview with size " + preferredPreviewSize.width + "x" + preferredPreviewSize.height);
+          Log.i(TAG, "starting preview with size " + preferredPreviewSize.width + "x" + preferredPreviewSize.height);
           if (state == State.ACTIVE) stopPreview();
           previewSize = preferredPreviewSize;
           parameters.setPreviewSize(preferredPreviewSize.width, preferredPreviewSize.height);
@@ -320,7 +317,7 @@ public class CameraView extends ViewGroup {
         }
         long previewStartMillis = System.currentTimeMillis();
         camera.startPreview();
-        Log.w(TAG, "camera.startPreview() -> " + (System.currentTimeMillis() - previewStartMillis) + "ms");
+        Log.i(TAG, "camera.startPreview() -> " + (System.currentTimeMillis() - previewStartMillis) + "ms");
         state = State.ACTIVE;
         Util.runOnMain(new Runnable() {
           @Override
@@ -370,7 +367,7 @@ public class CameraView extends ViewGroup {
     return outputOrientation;
   }
 
-  // https://github.com/WhisperSystems/Signal-Android/issues/4715
+  // https://github.com/signalapp/Signal-Android/issues/4715
   private boolean isTroublemaker() {
     return getCameraInfo().facing == CameraInfo.CAMERA_FACING_FRONT &&
            "JWR66Y".equals(Build.DISPLAY) &&
@@ -445,11 +442,11 @@ public class CameraView extends ViewGroup {
         final Size previewSize  = camera.getParameters().getPreviewSize();
         final Rect croppingRect = getCroppedRect(previewSize, previewRect, rotation);
 
-        Log.w(TAG, "previewSize: " + previewSize.width + "x" + previewSize.height);
-        Log.w(TAG, "data bytes: " + data.length);
-        Log.w(TAG, "previewFormat: " + camera.getParameters().getPreviewFormat());
-        Log.w(TAG, "croppingRect: " + croppingRect.toString());
-        Log.w(TAG, "rotation: " + rotation);
+        Log.i(TAG, "previewSize: " + previewSize.width + "x" + previewSize.height);
+        Log.i(TAG, "data bytes: " + data.length);
+        Log.i(TAG, "previewFormat: " + camera.getParameters().getPreviewFormat());
+        Log.i(TAG, "croppingRect: " + croppingRect.toString());
+        Log.i(TAG, "rotation: " + rotation);
         new CaptureTask(previewSize, rotation, croppingRect).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, data);
       }
     });
@@ -485,60 +482,40 @@ public class CameraView extends ViewGroup {
   }
 
   private void enqueueTask(SerialAsyncTask job) {
-    ApplicationContext.getInstance(getContext()).getJobManager().add(job);
+    AsyncTask.SERIAL_EXECUTOR.execute(job);
   }
 
-  private static abstract class SerialAsyncTask<Result> extends Job {
+  public static abstract class SerialAsyncTask<Result> implements Runnable {
 
-    public SerialAsyncTask() {
-      super(JobParameters.newBuilder().withGroupId(CameraView.class.getSimpleName()).create());
-    }
-
-    @Override public void onAdded() {}
-
-    @Override public final void onRun() {
-      try {
-        onWait();
-        Util.runOnMainSync(new Runnable() {
-          @Override public void run() {
-            onPreMain();
-          }
-        });
-
-        final Result result = onRunBackground();
-
-        Util.runOnMainSync(new Runnable() {
-          @Override public void run() {
-            onPostMain(result);
-          }
-        });
-      } catch (PreconditionsNotMetException e) {
+    @Override
+    public final void run() {
+      if (!onWait()) {
         Log.w(TAG, "skipping task, preconditions not met in onWait()");
+        return;
       }
+
+      Util.runOnMainSync(this::onPreMain);
+      final Result result = onRunBackground();
+      Util.runOnMainSync(() -> onPostMain(result));
     }
 
-    @Override public boolean onShouldRetry(Exception e) {
-      return false;
-    }
-
-    @Override public void onCanceled() { }
-
-    protected void onWait() throws PreconditionsNotMetException {}
+    protected boolean onWait() { return true; }
     protected void onPreMain() {}
     protected Result onRunBackground() { return null; }
     protected void onPostMain(Result result) {}
   }
 
   private abstract class PostInitializationTask<Result> extends SerialAsyncTask<Result> {
-    @Override protected void onWait() throws PreconditionsNotMetException {
+    @Override protected boolean onWait() {
       synchronized (CameraView.this) {
         if (!camera.isPresent()) {
-          throw new PreconditionsNotMetException();
+          return false;
         }
         while (getMeasuredHeight() <= 0 || getMeasuredWidth() <= 0 || !surface.isReady()) {
-          Log.w(TAG, String.format("waiting. surface ready? %s", surface.isReady()));
+          Log.i(TAG, String.format("waiting. surface ready? %s", surface.isReady()));
           Util.wait(CameraView.this, 0);
         }
+        return true;
       }
     }
   }

@@ -9,15 +9,15 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.ContactsContract;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.preference.CheckBoxPreference;
-import android.support.v7.preference.Preference;
-import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.CheckBoxPreference;
+import androidx.preference.Preference;
+import org.thoughtcrime.securesms.logging.Log;
 import android.widget.Toast;
 
-import com.google.android.gms.gcm.GoogleCloudMessaging;
+import com.google.firebase.iid.FirebaseInstanceId;
 
 import org.thoughtcrime.securesms.ApplicationPreferencesActivity;
 import org.thoughtcrime.securesms.LogSubmitActivity;
@@ -70,7 +70,7 @@ public class AdvancedPreferenceFragment extends CorrectedPreferenceFragment {
   public void onActivityResult(int reqCode, int resultCode, Intent data) {
     super.onActivityResult(reqCode, resultCode, data);
 
-    Log.w(TAG, "Got result: " + resultCode + " for req: " + reqCode);
+    Log.i(TAG, "Got result: " + resultCode + " for req: " + reqCode);
     if (resultCode == Activity.RESULT_OK && reqCode == PICK_IDENTITY_CONTACT) {
       handleIdentitySelection(data);
     }
@@ -192,8 +192,8 @@ public class AdvancedPreferenceFragment extends CorrectedPreferenceFragment {
             Log.w(TAG, e);
           }
 
-          if (!TextSecurePreferences.isGcmDisabled(context)) {
-            GoogleCloudMessaging.getInstance(context).unregister();
+          if (!TextSecurePreferences.isFcmDisabled(context)) {
+            FirebaseInstanceId.getInstance().deleteInstanceId();
           }
 
           return SUCCESS;
@@ -223,7 +223,7 @@ public class AdvancedPreferenceFragment extends CorrectedPreferenceFragment {
         Intent nextIntent = new Intent(getActivity(), ApplicationPreferencesActivity.class);
 
         Intent intent = new Intent(getActivity(), RegistrationActivity.class);
-        intent.putExtra("cancel_button", true);
+        intent.putExtra(RegistrationActivity.RE_REGISTRATION_EXTRA, true);
         intent.putExtra("next_intent", nextIntent);
         startActivity(intent);
       }

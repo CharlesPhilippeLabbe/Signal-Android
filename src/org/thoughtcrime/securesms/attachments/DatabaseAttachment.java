@@ -1,9 +1,10 @@
 package org.thoughtcrime.securesms.attachments;
 
 import android.net.Uri;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.mms.PartAuthority;
+import org.thoughtcrime.securesms.stickers.StickerLocator;
 
 public class DatabaseAttachment extends Attachment {
 
@@ -16,9 +17,11 @@ public class DatabaseAttachment extends Attachment {
                             boolean hasData, boolean hasThumbnail,
                             String contentType, int transferProgress, long size,
                             String fileName, String location, String key, String relay,
-                            byte[] digest, String fastPreflightId, boolean voiceNote)
+                            byte[] digest, String fastPreflightId, boolean voiceNote,
+                            int width, int height, boolean quote, @Nullable String caption,
+                            @Nullable StickerLocator stickerLocator)
   {
-    super(contentType, transferProgress, size, fileName, location, key, relay, digest, fastPreflightId, voiceNote);
+    super(contentType, transferProgress, size, fileName, location, key, relay, digest, fastPreflightId, voiceNote, width, height, quote, caption, stickerLocator);
     this.attachmentId = attachmentId;
     this.hasData      = hasData;
     this.hasThumbnail = hasThumbnail;

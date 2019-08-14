@@ -2,7 +2,9 @@ package org.thoughtcrime.securesms.contacts.avatars;
 
 
 import android.content.Context;
-import android.support.annotation.NonNull;
+import android.net.Uri;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
@@ -38,7 +40,17 @@ public class GroupRecordContactPhoto implements ContactPhoto {
   }
 
   @Override
-  public void updateDiskCacheKey(MessageDigest messageDigest) {
+  public @Nullable Uri getUri(@NonNull Context context) {
+    return null;
+  }
+
+  @Override
+  public boolean isProfilePhoto() {
+    return false;
+  }
+
+  @Override
+  public void updateDiskCacheKey(@NonNull MessageDigest messageDigest) {
     messageDigest.update(address.serialize().getBytes());
     messageDigest.update(Conversions.longToByteArray(avatarId));
   }

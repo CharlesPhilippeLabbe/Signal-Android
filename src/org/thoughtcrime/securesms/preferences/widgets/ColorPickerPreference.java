@@ -5,10 +5,10 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.content.res.TypedArrayUtils;
-import android.support.v7.preference.DialogPreference;
-import android.support.v7.preference.PreferenceViewHolder;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.res.TypedArrayUtils;
+import androidx.preference.DialogPreference;
+import androidx.preference.PreferenceViewHolder;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.widget.ImageView;
@@ -46,7 +46,7 @@ public class ColorPickerPreference extends DialogPreference {
 
     colorDescriptions = a.getTextArray(R.styleable.ColorPickerPreference_colorDescriptions);
     color = a.getColor(R.styleable.ColorPickerPreference_currentColor, 0);
-    columns = a.getInt(R.styleable.ColorPickerPreference_columns, 4);
+    columns = a.getInt(R.styleable.ColorPickerPreference_columns, 3);
     size = a.getInt(R.styleable.ColorPickerPreference_colorSize, 2);
     sortColors = a.getBoolean(R.styleable.ColorPickerPreference_sortColors, false);
 
